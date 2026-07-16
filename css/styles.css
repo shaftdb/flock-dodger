@@ -643,6 +643,24 @@ html, body {
   height: 12px;
 }
 
+.camera-marker.cat-alpr {
+  background: rgba(239, 68, 68, 0.4);
+  border-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.camera-marker.cat-cctv {
+  background: rgba(56, 189, 248, 0.35);
+  border-color: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+}
+
+.camera-marker.cat-speed {
+  background: rgba(251, 191, 36, 0.4);
+  border-color: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.35);
+}
+
 .camera-marker.near-route {
   background: rgba(245, 166, 35, 0.25);
   border-color: #f5a623;

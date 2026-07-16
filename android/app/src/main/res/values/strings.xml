@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Flock Dodger</string>
+    <string name="title_activity_main">Flock Dodger</string>
+    <string name="package_name">com.flockdodger.app</string>
+    <string name="custom_url_scheme">com.flockdodger.app</string>
+</resources>

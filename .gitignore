@@ -1,7 +1,20 @@
 # Dependencies / local servers
 node_modules/
 server/node_modules/
-.package-lock.json
+
+# Capacitor web export (regenerate with npm run build)
+www/
+
+# Android local
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+*.apk
+*.aab
+*.keystore
+*.jks
 
 # Environment / secrets (never commit Stripe keys)
 .env

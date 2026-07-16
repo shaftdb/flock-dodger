@@ -1,6 +1,7 @@
 /**
- * Live ALPR camera fetch via OpenStreetMap Overpass API.
- * Memory-conscious: hard caps, in-memory cache only (no huge localStorage blobs).
+ * Live camera fetch via OpenStreetMap Overpass API.
+ * Modes: ALPR/Flock-focused vs broader man_made=surveillance (security cameras).
+ * Memory-conscious: hard caps, in-memory cache only.
  */
 
 const OverpassCameras = (() => {
@@ -9,11 +10,11 @@ const OverpassCameras = (() => {
     "https://overpass.kumi.systems/api/interpreter",
   ];
 
-  const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
-  const MAX_BBOX_AREA = 1.2; // deg² — ~70 mi box-ish; larger = skip
-  const MAX_SPAN_DEG = 1.1; // max side length
-  const MAX_RESULTS = 600; // hard cap returned points
-  const MAX_CACHE_ENTRIES = 12;
+  const CACHE_TTL_MS = 30 * 60 * 1000;
+  const MAX_BBOX_AREA = 1.2;
+  const MAX_SPAN_DEG = 1.1;
+  const MAX_RESULTS = 600;
+  const MAX_CACHE_ENTRIES = 16;
   const MAX_CACHE_POINTS = 800;
 
   /** @type {Map<string, {expires:number, cameras:Array}>} */
@@ -26,6 +27,7 @@ const OverpassCameras = (() => {
     error: null,
     fetchedAt: null,
     bounds: null,
+    mode: "alpr",
   };
 
   function getStatus() {
@@ -41,7 +43,6 @@ const OverpassCameras = (() => {
     };
   }
 
-  /** Clamp a bbox so it never requests a whole state */
   function clampBounds(b) {
     const midLat = (b.minLat + b.maxLat) / 2;
     const midLng = (b.minLng + b.maxLng) / 2;
@@ -61,9 +62,9 @@ const OverpassCameras = (() => {
     return Math.abs(b.maxLat - b.minLat) * Math.abs(b.maxLng - b.minLng);
   }
 
-  function cacheKey(b) {
+  function cacheKey(b, mode) {
     const q = (n) => (Math.floor(n * 10) / 10).toFixed(1);
-    return `${q(b.minLat)},${q(b.minLng)},${q(b.maxLat)},${q(b.maxLng)}`;
+    return `${mode}|${q(b.minLat)},${q(b.minLng)},${q(b.maxLat)},${q(b.maxLng)}`;
   }
 
   function readCache(key) {
@@ -73,7 +74,6 @@ const OverpassCameras = (() => {
       memCache.delete(key);
       return null;
     }
-    // LRU touch
     memCache.delete(key);
     memCache.set(key, data);
     return data.cameras;
@@ -86,12 +86,14 @@ const OverpassCameras = (() => {
       lng: c.lng,
       name: c.name,
       type: c.type,
+      category: c.category,
       source: c.source,
       live: true,
       osmId: c.osmId,
       osmType: c.osmType,
       manufacturer: c.manufacturer || "",
       operator: c.operator || "",
+      alpr: Boolean(c.alpr),
     }));
     memCache.set(key, { expires: Date.now() + CACHE_TTL_MS, cameras: slim });
     while (memCache.size > MAX_CACHE_ENTRIES) {
@@ -113,28 +115,84 @@ const OverpassCameras = (() => {
     }
   }
 
-  // Run once at load — old builds stuffed multi‑MB camera arrays into localStorage
   purgeLegacyLocalStorage();
 
-  function buildQuery(b) {
+  /**
+   * @param {object} b
+   * @param {"alpr"|"all"} mode
+   */
+  function buildQuery(b, mode) {
     const s = b.minLat.toFixed(5);
     const w = b.minLng.toFixed(5);
     const n = b.maxLat.toFixed(5);
     const e = b.maxLng.toFixed(5);
     const bbox = `${s},${w},${n},${e}`;
 
-    // Keep query tight for speed + smaller payloads
-    return `
-[out:json][timeout:20][maxsize:16777216];
+    // Always pull ALPR / Flock-style tags
+    let q = `
+[out:json][timeout:22][maxsize:16777216];
 (
   node["surveillance:type"="ALPR"](${bbox});
   way["surveillance:type"="ALPR"](${bbox});
+  node["surveillance:type"="alpr"](${bbox});
   node["man_made"="surveillance"]["surveillance:type"~"^(ALPR|alpr|ANPR|anpr)$"](${bbox});
+  node["camera:type"~"ALPR|alpr|ANPR|anpr"](${bbox});
   node["manufacturer"~"Flock",i](${bbox});
   node["brand"~"Flock",i](${bbox});
+`;
+
+    if (mode === "all") {
+      // Broader security / CCTV mapping on OSM (can be dense — capped client-side)
+      q += `
+  node["man_made"="surveillance"](${bbox});
+  way["man_made"="surveillance"](${bbox});
+  node["surveillance"="public"](${bbox});
+  node["surveillance"="outdoor"](${bbox});
+  node["surveillance"="camera"](${bbox});
+  node["highway"="speed_camera"](${bbox});
+`;
+    }
+
+    q += `
 );
 out center tags;
-`.trim();
+`;
+    return q.trim();
+  }
+
+  function classifyElement(tags) {
+    const blob = Object.entries(tags || {})
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ")
+      .toLowerCase();
+
+    const isFlock = /flock/.test(blob);
+    const isAlpr =
+      isFlock ||
+      /surveillance:type=(alpr|anpr)/.test(blob) ||
+      /camera:type=.*(alpr|anpr)/.test(blob) ||
+      /\balpr\b|\banpr\b/.test(blob);
+
+    const isSpeed = /highway=speed_camera|speed.?camera/.test(blob);
+
+    let category = "surveillance";
+    let type = tags["surveillance:type"] || tags["camera:type"] || "Camera";
+
+    if (isFlock) {
+      category = "alpr";
+      type = "Flock";
+    } else if (isAlpr) {
+      category = "alpr";
+      type = tags["surveillance:type"] || tags["camera:type"] || "ALPR";
+    } else if (isSpeed) {
+      category = "speed";
+      type = "Speed camera";
+    } else if (tags["man_made"] === "surveillance" || tags.surveillance) {
+      category = "surveillance";
+      type = tags["surveillance:type"] || tags["camera:type"] || "Security camera";
+    }
+
+    return { category, type, alpr: isAlpr || isFlock };
   }
 
   function elementToCamera(el) {
@@ -147,14 +205,13 @@ out center tags;
     }
     if (lat == null || lng == null) return null;
 
+    const { category, type, alpr } = classifyElement(tags);
     const brand = tags.brand || tags.manufacturer || tags.operator || "";
-    const isFlock = /flock/i.test(`${brand} ${tags.name || ""} ${tags.manufacturer || ""}`);
-    const type = isFlock ? "Flock" : tags["surveillance:type"] || "ALPR";
     const name =
       tags.name ||
       tags["addr:street"] ||
       (brand ? String(brand) : null) ||
-      `OSM ALPR #${el.id}`;
+      (alpr ? `OSM ALPR #${el.id}` : `OSM camera #${el.id}`);
 
     return {
       id: `osm-${el.type || "node"}-${el.id}`,
@@ -162,6 +219,8 @@ out center tags;
       lng: Number(lng),
       name: String(name).slice(0, 120),
       type: String(type),
+      category,
+      alpr,
       source: "openstreetmap",
       region: "",
       osmId: el.id,
@@ -191,14 +250,23 @@ out center tags;
 
   /**
    * @param {{minLat,maxLat,minLng,maxLng}} bounds
-   * @param {{force?: boolean, signal?: AbortSignal, pad?: number}} [opts]
+   * @param {{force?: boolean, signal?: AbortSignal, pad?: number, mode?: "alpr"|"all"}} [opts]
    */
   async function fetchInBounds(bounds, opts = {}) {
     if (!bounds) {
-      lastStatus = { ok: false, count: 0, source: null, error: "No bounds", fetchedAt: null, bounds: null };
+      lastStatus = {
+        ok: false,
+        count: 0,
+        source: null,
+        error: "No bounds",
+        fetchedAt: null,
+        bounds: null,
+        mode: opts.mode || "alpr",
+      };
       return [];
     }
 
+    const mode = opts.mode === "all" ? "all" : "alpr";
     let b = padBounds(bounds, opts.pad ?? 0.015);
     b = clampBounds(b);
     const area = bboxArea(b);
@@ -211,11 +279,12 @@ out center tags;
         error: "Zoom in for live cameras (area too large for a safe load)",
         fetchedAt: new Date().toISOString(),
         bounds: b,
+        mode,
       };
       return [];
     }
 
-    const key = cacheKey(b);
+    const key = cacheKey(b, mode);
     if (!opts.force) {
       const cached = readCache(key);
       if (cached) {
@@ -226,12 +295,13 @@ out center tags;
           error: null,
           fetchedAt: new Date().toISOString(),
           bounds: b,
+          mode,
         };
         return cached.slice(0, MAX_RESULTS);
       }
     }
 
-    const query = buildQuery(b);
+    const query = buildQuery(b, mode);
     let lastErr = null;
 
     for (const mirror of MIRRORS) {
@@ -241,7 +311,16 @@ out center tags;
         const cameras = [];
         const seen = new Set();
 
-        for (const el of elements) {
+        // Prefer ALPR/Flock first so cap keeps the most relevant points
+        const ranked = elements.slice().sort((a, b) => {
+          const ca = classifyElement(a.tags || {});
+          const cb = classifyElement(b.tags || {});
+          const ra = ca.alpr ? 0 : ca.category === "speed" ? 1 : 2;
+          const rb = cb.alpr ? 0 : cb.category === "speed" ? 1 : 2;
+          return ra - rb;
+        });
+
+        for (const el of ranked) {
           const cam = elementToCamera(el);
           if (!cam) continue;
           if (seen.has(cam.id)) continue;
@@ -251,6 +330,7 @@ out center tags;
         }
 
         writeCache(key, cameras);
+        const alprN = cameras.filter((c) => c.alpr).length;
         lastStatus = {
           ok: true,
           count: cameras.length,
@@ -258,8 +338,10 @@ out center tags;
           error: null,
           fetchedAt: new Date().toISOString(),
           bounds: b,
+          mode,
+          alprCount: alprN,
+          otherCount: cameras.length - alprN,
         };
-        // Drop raw Overpass payload reference ASAP
         return cameras;
       } catch (err) {
         if (err.name === "AbortError") throw err;
@@ -275,6 +357,7 @@ out center tags;
       error: lastErr?.message || "Overpass request failed",
       fetchedAt: new Date().toISOString(),
       bounds: b,
+      mode,
     };
     return [];
   }

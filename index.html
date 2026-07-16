@@ -325,12 +325,20 @@
                 <span class="flex items-center gap-2 text-sm min-w-0">
                   <span class="h-2 w-2 shrink-0 rounded-full bg-flock-accent"></span>
                   <span class="min-w-0">
-                    <span class="block">Live OSM / ALPR</span>
-                    <span class="block text-[10px] text-flock-muted font-normal normal-case tracking-normal">OpenStreetMap Overpass (real mapped cameras)</span>
+                    <span class="block">Live OpenStreetMap</span>
+                    <span class="block text-[10px] text-flock-muted font-normal normal-case tracking-normal">Community-mapped cameras (Overpass)</span>
                   </span>
                 </span>
                 <input type="checkbox" id="toggle-live-osm" class="toggle" checked />
               </label>
+              <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-2.5">
+                <label for="osm-mode-select" class="text-[10px] uppercase tracking-wide text-flock-muted font-semibold">What to load</label>
+                <select id="osm-mode-select" class="form-field mt-1.5 text-sm">
+                  <option value="all">All OSM surveillance (+ ALPR / Flock)</option>
+                  <option value="alpr">ALPR / Flock plate readers only</option>
+                </select>
+                <p class="text-[10px] text-flock-muted mt-1.5 leading-relaxed">“All” includes man_made=surveillance CCTV where mapped. Coverage varies by city.</p>
+              </div>
               <div class="rounded-xl border border-flock-border bg-flock-bg/60 px-3 py-2 text-[11px] text-flock-dim">
                 <p id="osm-status" class="leading-relaxed">Live data idle — pan the map or plan a route to load cameras.</p>
                 <button type="button" id="btn-refresh-osm" class="mt-1.5 text-flock-accent font-medium hover:underline">Refresh live cameras</button>
@@ -469,7 +477,9 @@
         <div class="pointer-events-none absolute top-3 right-3 z-10 hidden sm:block">
           <div class="pointer-events-auto rounded-xl bg-flock-surface/90 backdrop-blur-md border border-flock-border px-3 py-2.5 shadow-lg text-xs space-y-1.5">
             <p class="font-medium text-flock-dim mb-1">Legend</p>
-            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-flock-danger"></span> OSM ALPR (live)</div>
+            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-flock-danger"></span> ALPR / Flock</div>
+            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-sky-400"></span> Security CCTV</div>
+            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span> Speed camera</div>
             <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-violet-400"></span> Your report</div>
             <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-route rounded"></span> Standard route</div>
             <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-avoid rounded"></span> Avoidance route</div>

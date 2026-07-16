@@ -63,5 +63,7 @@ const AppConfig = {
   cameras: {
     useLiveOsm: true,
     useCommunityReports: true,
+    /** "all" = broader OSM surveillance; "alpr" = plate readers / Flock only */
+    osmMode: "all",
   },
 };

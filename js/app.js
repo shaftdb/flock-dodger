@@ -29,6 +29,8 @@
     showBuffers: false,
     showCommunity: true,
     useLiveOsm: true,
+    /** "alpr" = Flock/ALPR only; "all" = broader OSM surveillance cameras */
+    osmMode: "all",
     reportPickMode: false,
     osmFetchAbort: null,
     lastOsmCameras: [],
@@ -110,6 +112,7 @@
     toggleBuffers: $("toggle-buffers"),
     toggleCommunity: $("toggle-community"),
     toggleLiveOsm: $("toggle-live-osm"),
+    osmModeSelect: $("osm-mode-select"),
     osmStatus: $("osm-status"),
     btnRefreshOsm: $("btn-refresh-osm"),
     btnReport: $("btn-report"),
@@ -367,7 +370,12 @@
     }
     if (st.ok) {
       const src = st.source === "cache" ? "cached" : st.source || "OSM";
-      els.osmStatus.textContent = `Live: ${st.count} ALPR point${st.count === 1 ? "" : "s"} (${src}). Mapped by OSM contributors — not 100% complete.`;
+      const mode = st.mode === "all" ? "all cameras" : "ALPR/Flock";
+      const split =
+        st.alprCount != null
+          ? ` · ${st.alprCount} ALPR, ${st.otherCount || 0} other`
+          : "";
+      els.osmStatus.textContent = `Live (${mode}): ${st.count} point${st.count === 1 ? "" : "s"}${split} (${src}). OSM community data — incomplete.`;
       return;
     }
     els.osmStatus.textContent = "Live data idle — pan the map or plan a route to load cameras.";
@@ -396,9 +404,18 @@
           force: opts.forceLive,
           signal: opts.signal,
           pad: 0.012,
+          mode: state.osmMode === "alpr" ? "alpr" : "all",
         });
         state.lastOsmCameras = live;
-        parts.push(...live);
+        // For routing, prioritize ALPR when in "all" mode (security CCTV still shown on map)
+        if (opts.forRouting && state.osmMode === "all") {
+          const alpr = live.filter((c) => c.alpr || c.category === "alpr");
+          const rest = live.filter((c) => !(c.alpr || c.category === "alpr"));
+          // Weight avoidance toward plate readers; still include nearby CCTV lightly
+          parts.push(...alpr, ...rest.slice(0, Math.min(80, rest.length)));
+        } else {
+          parts.push(...live);
+        }
       } catch (err) {
         if (err.name !== "AbortError") {
           console.warn("Live OSM fetch failed", err);
@@ -463,11 +480,15 @@
 
   function cameraIcon(nearRoute, cam) {
     const community = cam?.community || cam?.source === "community";
+    const cat = cam?.category || (cam?.alpr ? "alpr" : "surveillance");
     const cls = [
       "camera-marker",
       "camera-marker--lite",
       nearRoute ? "near-route" : "",
       community ? "community" : "",
+      !community && cat === "alpr" ? "cat-alpr" : "",
+      !community && cat === "surveillance" ? "cat-cctv" : "",
+      !community && cat === "speed" ? "cat-speed" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -623,8 +644,13 @@
             : cam.source === "community"
               ? "Your report"
               : escapeHtml(cam.source || "unknown");
+        const catLabel = cam.category
+          ? `<br/><span style="color:#6b8578;font-size:11px">Kind: ${escapeHtml(cam.category)}${
+              cam.alpr ? " · plate reader" : ""
+            }</span>`
+          : "";
         return `<strong>${escapeHtml(cam.name)}</strong><br/>
-         <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span><br/>
+         <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span>${catLabel}<br/>
          <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}`;
       });
 
@@ -1844,6 +1870,12 @@
       updateOsmStatusText();
       refreshCamerasAfterReportChange();
     });
+    els.osmModeSelect?.addEventListener("change", () => {
+      state.osmMode = els.osmModeSelect.value === "alpr" ? "alpr" : "all";
+      Storage.saveSettings({ osmMode: state.osmMode });
+      if (typeof OverpassCameras !== "undefined") OverpassCameras.clearCache();
+      refreshCamerasAfterReportChange();
+    });
     els.btnRefreshOsm?.addEventListener("click", async () => {
       if (typeof OverpassCameras !== "undefined") OverpassCameras.clearCache();
       if (state.lastPlan && state.start && state.end) {
@@ -2061,11 +2093,18 @@
     }
     if (typeof AppConfig !== "undefined" && AppConfig.cameras) {
       state.useLiveOsm = AppConfig.cameras.useLiveOsm !== false;
+      if (AppConfig.cameras.osmMode === "alpr" || AppConfig.cameras.osmMode === "all") {
+        state.osmMode = AppConfig.cameras.osmMode;
+      }
     }
     if (typeof settings.useLiveOsm === "boolean") {
       state.useLiveOsm = settings.useLiveOsm;
     }
+    if (settings.osmMode === "alpr" || settings.osmMode === "all") {
+      state.osmMode = settings.osmMode;
+    }
     if (els.toggleLiveOsm) els.toggleLiveOsm.checked = state.useLiveOsm;
+    if (els.osmModeSelect) els.osmModeSelect.value = state.osmMode;
     updateOsmStatusText();
 
     PWA.init({
