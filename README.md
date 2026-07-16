@@ -32,7 +32,17 @@ npx --yes serve -l 8080
 
 Open `http://localhost:8080`.
 
-> **Tip:** Try an Austin, TX pair (e.g. *Austin Convention Center* → *Barton Springs Pool*) — the demo dataset is densest around several U.S. metros.
+### Use it on your phone
+
+See **[DEPLOY.md](./DEPLOY.md)** for:
+
+- **GitHub Pages** (free public HTTPS URL — best long-term)
+- **Netlify Drop** (drag-and-drop, no git)
+- **Same Wi‑Fi** access to your PC
+
+This repo includes a GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) that publishes the site when you push to `main`.
+
+> **Tip:** Try **WV / OH demo** or an Austin pair — the mock camera dataset is densest there.
 
 ## Privacy model
 
