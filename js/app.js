@@ -200,92 +200,21 @@
   }
 
   /**
-   * On app start: GPS → ~35 mi area + live cameras; fallback last view / US default.
-   * Also pre-fills Start when empty so trip planning is one field away.
+   * On app start: restore last map view only — no automatic GPS / start address.
+   * User taps the locate button when they want current location as start.
    */
-  function autoFocusCurrentArea() {
+  function initMapViewWithoutGps() {
     if (!state.map) return;
-
-    const finish = () => {
-      setLoading(false);
-      refreshCamerasForView(false);
-      updateMapEmpty();
-    };
-
-    if (!navigator.geolocation) {
-      if (!restoreLastMapView()) {
-        // Rough eastern-US work-trip fallback (not whole continent)
-        focusAreaAround(39.0, -82.5, 45, { animate: false });
-      }
-      finish();
-      return;
+    if (!restoreLastMapView()) {
+      // Neutral regional view (not whole continent) if no saved view
+      focusAreaAround(39.0, -82.5, 45, { animate: false });
     }
-
-    setLoading(true, "Centering on your area…");
-    setLoadingStep("geo");
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          // Accuracy-based radius: tighter when GPS is good, up to ~50 mi when coarse
-          const accM = pos.coords.accuracy || 5000;
-          let radiusMi = LOCAL_AREA_RADIUS_MI;
-          if (accM > 20000) radiusMi = 50;
-          else if (accM < 100) radiusMi = 28;
-
-          focusAreaAround(lat, lng, radiusMi, { animate: true });
-
-          // Prefill start if user hasn't entered one
-          if (!state.start && !els.startInput?.value?.trim()) {
-            try {
-              setFieldLoading("start", true);
-              const place = await Geocoding.reverse(lat, lng);
-              state.start = place;
-              els.startInput.value = place.display_name;
-              clearFieldError("start");
-              setEndpoints(state.start, state.end);
-            } catch {
-              state.start = {
-                lat,
-                lng,
-                display_name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-                type: "gps",
-              };
-              els.startInput.value = state.start.display_name;
-              setEndpoints(state.start, state.end);
-            } finally {
-              setFieldLoading("start", false);
-            }
-          }
-
-          showToast(`Map set to ~${Math.round(radiusMi)} mi around your location`, "success");
-        } finally {
-          finish();
-        }
-      },
-      (err) => {
-        console.warn("Auto-locate failed", err);
-        if (!restoreLastMapView()) {
-          focusAreaAround(39.0, -82.5, 45, { animate: false });
-        }
-        if (err.code === 1) {
-          showToast("Location denied — using last map area. Enable GPS for auto-center.", "error");
-        }
-        finish();
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 12000,
-        maximumAge: 5 * 60 * 1000,
-      }
-    );
+    refreshCamerasForView(false);
+    updateMapEmpty();
   }
 
   // ---------- Map ----------
   function initMap() {
-    // Temporary center; autoFocusCurrentArea replaces this immediately after boot
     const saved = Storage.loadSettings().lastMapView;
     const startLat = saved?.lat ?? 39.0;
     const startLng = saved?.lng ?? -82.5;
@@ -2204,8 +2133,8 @@
     updateMapEmpty();
     updateOnlineStatus();
     refreshCommunityUI();
-    // GPS → local area + live cameras (no manual zoom needed)
-    autoFocusCurrentArea();
+    // Restore last map area only — do not auto-fill GPS as start
+    initMapViewWithoutGps();
 
     console.info(
       "%cFlock Dodger%c ready — privacy-first routing",

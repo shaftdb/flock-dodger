@@ -144,7 +144,7 @@
                   </span>
                   <input id="start-input" type="text" autocomplete="off" placeholder="Start address or place" class="field" />
                   <span id="start-spinner" class="field-spinner" hidden aria-hidden="true"></span>
-                  <button type="button" id="btn-locate" class="input-action" title="Use my location" aria-label="Use my location">
+                  <button type="button" id="btn-locate" class="input-action" title="Use my current location as start" aria-label="Use my current location as start">
                     <svg class="h-4 w-4 locate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
                   </button>
                 </div>
@@ -182,7 +182,7 @@
                 </span>
               </button>
               <p class="text-[10px] text-flock-muted leading-relaxed">
-                Drag <strong class="text-flock-dim">A / B</strong> markers or green handles on the map to reshape the route.
+                Tap the crosshair by Start for GPS. Drag <strong class="text-flock-dim">A / B</strong> or green handles to reshape.
               </p>
               <div class="grid grid-cols-2 gap-2">
                 <button id="btn-demo-wv" type="button" class="btn-secondary text-xs">
@@ -454,7 +454,7 @@
         <div id="map-empty" class="pointer-events-none absolute inset-x-3 top-3 z-10 sm:inset-x-auto sm:left-3 sm:right-auto sm:max-w-xs">
           <div class="pointer-events-auto rounded-xl bg-flock-surface/92 backdrop-blur-md border border-flock-border px-3.5 py-3 shadow-lg">
             <p class="text-sm font-medium text-flock-text">Plan a private drive</p>
-            <p class="text-xs text-flock-muted mt-1 leading-relaxed">Map centers on your area (~35 mi). Enter a destination, try a demo, or long-press to drop a pin.</p>
+            <p class="text-xs text-flock-muted mt-1 leading-relaxed">Enter start &amp; end, tap the crosshair for current location, try a demo, or long-press the map to drop a pin.</p>
             <ul class="mt-2 space-y-1 text-[11px] text-flock-dim">
               <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-accent"></span> Drag A/B to move endpoints</li>
               <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-avoid"></span> Drag green handles to bend the avoid route</li>
