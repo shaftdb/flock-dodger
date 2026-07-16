@@ -81,49 +81,16 @@ No backend of your own is required for the prototype.
 - Avoidance is a **simulation**: offset via-points + alternative route scoring, not guaranteed camera-free navigation.
 - Offline map packs remain demo stubs after unlock; the service worker caches the app shell only.
 
-## Premium & Stripe
+## Support & Stripe
 
-Unlocks are stored in `localStorage` on the device.
+**Core routing is free forever** (no ads). Optional one-time Supporter / tip via Stripe. Details: **[MONETIZATION.md](./MONETIZATION.md)**.
 
-| Path | Behavior |
-|------|----------|
-| **Watch ad** | Placeholder rewarded video (countdown). Grants **24h** unlock (configurable). Soft cap: 3/day/feature. |
-| **Stripe** | One-time permanent unlock for a feature or the full bundle. |
+| Offer | Default | Effect |
+|--------|---------|--------|
+| **Supporter** | $14.99 once | Lifetime perks; funds development |
+| **Tip** | $3 once | Thanks only |
 
-### Demo mode (default)
-
-With empty Stripe config, **Buy** opens a **demo Checkout** modal and unlocks locally (no charge). Good for UI testing.
-
-### Real Stripe — Payment Links (simplest)
-
-1. Create one-time Payment Links in [Stripe Dashboard](https://dashboard.stripe.com/payment-links).
-2. Set success URL to:  
-   `https://your-domain/index.html?checkout=success&feature=offline`  
-   (use `live_intel`, `turn_by_turn`, or `bundle` as needed).
-3. Put links in `js/config.js` → `stripe.paymentLinks`.
-
-### Real Stripe — Checkout Sessions (server)
-
-```bash
-cd server
-npm install
-set STRIPE_SECRET_KEY=sk_test_...
-set STRIPE_PRICE_OFFLINE=price_...
-set STRIPE_PRICE_LIVE_INTEL=price_...
-set STRIPE_PRICE_TURN_BY_TURN=price_...
-set STRIPE_PRICE_BUNDLE=price_...
-npm start
-```
-
-In `js/config.js`:
-
-```js
-publishableKey: "pk_test_...",
-checkoutApiUrl: "http://localhost:4242/api/create-checkout-session",
-allowDemoCheckout: false,
-```
-
-> Production should verify `session_id` on a backend before granting permanent unlocks. This prototype trusts the success return URL.
+Stored in `localStorage` on device. Configure Payment Links for `supporter` / `tip` in `js/config.js`, or `STRIPE_PRICE_SUPPORTER` / `STRIPE_PRICE_TIP` with `server/create-checkout.mjs`.
 
 ## License
 
