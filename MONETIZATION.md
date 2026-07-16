@@ -21,17 +21,26 @@ Privacy-adjacent products that retain trust (Proton, Mullvad, DeFlock-style tool
 - Avoid **tracking ads**
 - Prefer **transparent paid support** or paid *extras*, not paywalled basics
 
-## Payment rail: Rumble Wallet
+## Payment rails (privacy-first)
 
-Rumble Wallet is a **self-custodial crypto wallet** (BTC, USDT, XAUT). Creators receive tips; there is **no Stripe-style card API** for external sites.
+**Do not** put personal PayPal.me or Cash App $cashtag links on a public site if you care about privacy — they expose your real identity / social graph.
 
-**What “route payments to Rumble” means in practice:**
+### Easiest private option: project-only crypto address
 
-1. You paste **public receive addresses** (or a Rumble channel tip-jar link) into `js/config.js`.
-2. Supporters open **Pay with Rumble Wallet**, copy address / open your channel, send crypto.
-3. They tap **I’ve sent payment** → Supporter unlocks on that device (honor system).
+1. Create a **separate** free wallet used only for Flock Dodger (not your daily wallet).  
+2. Copy the **public receive address** (never the seed phrase).  
+3. Paste into `js/config.js` → `payments.crypto.btc` (and USDT if you want).  
 
-There is no automatic chain watcher in this static app. For a personal tool that’s fine; for scale you’d verify txs later.
+The page shows **only that address** — not your name. Honor unlock after “I’ve sent payment.”
+
+### Other options (later)
+
+| Option | Privacy | Friction |
+|--------|---------|----------|
+| Project BTC address | Good | Low once set up |
+| Ko-fi / BMC under brand name | OK | New account |
+| Stripe / PayPal Business (DBA) | Business identity | Higher setup |
+| Personal PayPal / Cash App links | **Poor** | Easy but not recommended public |
 
 ### Free forever (no account, no ads)
 

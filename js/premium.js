@@ -163,53 +163,26 @@ const Premium = (() => {
     return AppConfig.payments || {};
   }
 
-  function buildPaypalUrl(usdAmount) {
-    const raw = (paymentsConfig().paypalMe || "").trim();
-    if (!raw) return "";
-    // Accept full URL or bare username
-    let base = raw;
-    if (!/^https?:\/\//i.test(base)) {
-      base = `https://paypal.me/${base.replace(/^\/+/, "")}`;
-    }
-    base = base.replace(/\/+$/, "");
-    // If URL already ends with /amount, leave it; else append suggested amount
-    if (/\/\d+(\.\d+)?$/.test(base)) return base;
-    const amt = String(usdAmount || "").replace(/[^0-9.]/g, "");
-    return amt ? `${base}/${amt}` : base;
-  }
-
-  function buildCashAppUrl(usdAmount) {
-    let tag = (paymentsConfig().cashAppTag || "").trim();
-    if (!tag) return "";
-    tag = tag.replace(/^\$/, "");
-    const amt = String(usdAmount || "").replace(/[^0-9.]/g, "");
-    return amt ? `https://cash.app/$${tag}/${amt}` : `https://cash.app/$${tag}`;
-  }
-
   function paymentOptionsConfigured() {
     const p = paymentsConfig();
-    const r = AppConfig.rumble || {};
+    const crypto = Boolean((p.crypto?.btc || "").trim() || (p.crypto?.usdt || "").trim());
     return {
-      paypal: Boolean((p.paypalMe || "").trim()),
-      cashApp: Boolean((p.cashAppTag || "").trim()),
-      rumble: Boolean((p.rumbleChannelUrl || r.channelUrl || "").trim()),
-      crypto: Boolean(p.crypto?.btc || p.crypto?.usdt || r.addresses?.btc || r.addresses?.usdt),
-      any:
-        Boolean((p.paypalMe || "").trim()) ||
-        Boolean((p.cashAppTag || "").trim()) ||
-        Boolean((p.rumbleChannelUrl || r.channelUrl || "").trim()) ||
-        Boolean(p.crypto?.btc || p.crypto?.usdt || r.addresses?.btc || r.addresses?.usdt),
+      crypto,
+      any: crypto,
     };
   }
 
   function rumbleConfigured() {
     const opts = paymentOptionsConfigured();
-    return {
-      hasAddr: opts.crypto,
-      hasChannel: opts.rumble,
-      username: paymentsConfig().rumbleUsername || AppConfig.rumble?.username || "",
-      any: opts.any,
-    };
+    return { hasAddr: opts.crypto, hasChannel: false, username: "", any: opts.any };
+  }
+
+  function buildPaypalUrl() {
+    return "";
+  }
+
+  function buildCashAppUrl() {
+    return "";
   }
 
   function stripeConfigured() {

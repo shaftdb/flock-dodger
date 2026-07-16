@@ -14,66 +14,80 @@ const PremiumUI = (() => {
     return AppConfig.prices?.[id]?.label || "—";
   }
 
+  function hasCryptoPayments() {
+    return Boolean(Premium.paymentOptionsConfigured?.().crypto);
+  }
+
   function renderFeatureList() {
     const list = $("premium-feature-list");
     if (!list) return;
 
     const supporter = Premium.isSupporter();
+    const canPay = hasCryptoPayments();
 
     list.innerHTML = `
-      <div class="premium-card${supporter ? " premium-card--unlocked" : ""}">
+      <div class="premium-card premium-card--unlocked">
         <div class="flex items-start gap-2.5">
           <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-flock-accent/15 text-flock-accent">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6L12 2z"/></svg>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-sm font-medium">Core routing</p>
+              <p class="text-sm font-medium">Everything here</p>
               <span class="badge-unlocked">Free forever</span>
             </div>
-            <p class="text-xs text-flock-muted mt-0.5">Live OSM cameras, privacy routes, export, saved routes, reports. No ads. No account.</p>
+            <p class="text-xs text-flock-muted mt-0.5">Live OSM cameras, privacy routes, export, saves, reports. No ads. No account. No personal payment profiles.</p>
           </div>
         </div>
       </div>
-      <div class="premium-card${supporter ? " premium-card--unlocked" : ""}">
+      ${
+        canPay || supporter
+          ? `<div class="premium-card${supporter ? " premium-card--unlocked" : ""}">
         <div class="flex items-start gap-2.5">
           <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-flock-warn/10 text-flock-warn">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2v-7M12 2v10m0 0l-3-3m3 3l3-3"/></svg>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-sm font-medium">Supporter</p>
-              ${
-                supporter
-                  ? `<span class="badge-unlocked">Thank you</span>`
-                  : `<span class="badge-soon">Optional</span>`
-              }
+              <p class="text-sm font-medium">Optional crypto support</p>
+              ${supporter ? `<span class="badge-unlocked">Thank you</span>` : `<span class="badge-soon">Optional</span>`}
             </div>
-            <p class="text-xs text-flock-muted mt-0.5">One-time purchase. Funds development &amp; future offline packs / privacy nav. No subscription.</p>
+            <p class="text-xs text-flock-muted mt-0.5">Project wallet only (address, not a personal profile). Skip anytime.</p>
             <div class="mt-2 flex items-center justify-between gap-2">
               <span class="text-[11px] font-mono text-flock-dim">${supporter ? "Unlocked" : priceLabel("supporter") + " once"}</span>
               <button type="button" class="text-[11px] text-flock-accent font-medium" data-open-support>
-                ${supporter ? "Details" : "Support"}
+                ${supporter ? "Details" : "Crypto support"}
               </button>
             </div>
           </div>
         </div>
-      </div>`;
+      </div>`
+          : `<div class="premium-card">
+        <p class="text-xs text-flock-muted leading-relaxed">
+          Payments aren’t enabled (keeps your personal accounts private). Use the app free.
+          When you want support later: a <strong class="text-flock-dim">project-only crypto address</strong> is the simplest private option — see Support details.
+        </p>
+        <button type="button" class="mt-2 text-[11px] text-flock-accent font-medium" data-open-support>How support works</button>
+      </div>`
+      }`;
 
     list.querySelectorAll("[data-open-support]").forEach((btn) => {
       btn.addEventListener("click", openSupportModal);
     });
 
+    const buyBundle = $("btn-buy-bundle");
+    const tipBtn = $("btn-buy-tip");
+    const payBox = $("support-pay-box");
+    if (payBox) payBox.hidden = !canPay && !supporter;
+    if (buyBundle) {
+      buyBundle.hidden = !canPay;
+      buyBundle.disabled = supporter;
+      buyBundle.textContent = supporter ? "You're a Supporter" : "Crypto Supporter";
+    }
+    if (tipBtn) tipBtn.hidden = !canPay;
+
     const bundlePrice = $("bundle-price");
     if (bundlePrice) bundlePrice.textContent = priceLabel("supporter");
-
-    const buyBundle = $("btn-buy-bundle");
-    if (buyBundle) {
-      buyBundle.disabled = supporter;
-      buyBundle.textContent = supporter ? "You're a Supporter" : "Become a Supporter";
-      buyBundle.classList.toggle("opacity-50", supporter);
-    }
-
     const tipPrice = $("tip-price");
     if (tipPrice) tipPrice.textContent = priceLabel("tip");
 
@@ -209,74 +223,32 @@ const PremiumUI = (() => {
     const usd = String(
       isTip ? p.amounts?.tip || AppConfig.prices?.tip?.amount || "3" : p.amounts?.supporter || "15"
     );
-    const name = isTip ? "Tip the project" : "Flock Dodger Supporter";
+    const name = isTip ? "Crypto tip" : "Crypto Supporter";
 
     if (item) item.textContent = name;
-    if (amountEl) amountEl.textContent = `$${usd}`;
+    if (amountEl) amountEl.textContent = `~$${usd}`;
     if (desc) {
       desc.textContent = isTip
-        ? `Send about $${usd} with PayPal or Cash App if you already use them. Optional — no unlock required.`
-        : `Send about $${usd} once with PayPal or Cash App for Supporter on this device. No Stripe setup.`;
+        ? `Send about $${usd} in BTC (or USDT) to the project address below. Optional.`
+        : `Send about $${usd} in BTC (or USDT) to the project address for Supporter on this device.`;
     }
 
-    if (payButtons) {
-      payButtons.innerHTML = "";
-      const paypalUrl =
-        typeof Premium.buildPaypalUrl === "function" ? Premium.buildPaypalUrl(usd) : "";
-      const cashUrl =
-        typeof Premium.buildCashAppUrl === "function" ? Premium.buildCashAppUrl(usd) : "";
-      const rumbleUrl = (p.rumbleChannelUrl || AppConfig.rumble?.channelUrl || "").trim();
-
-      if (paypalUrl) {
-        payButtons.appendChild(
-          payLinkButton("Pay with PayPal", paypalUrl, "bg-[#0070ba]/15 text-[#5eb1f7]")
-        );
-      }
-      if (cashUrl) {
-        payButtons.appendChild(
-          payLinkButton("Pay with Cash App", cashUrl, "bg-[#00d632]/12 text-[#00d632]")
-        );
-      }
-      if (rumbleUrl) {
-        payButtons.appendChild(
-          payLinkButton("Tip on Rumble", rumbleUrl, "bg-emerald-500/12 text-emerald-400")
-        );
-      }
-
-      if (!paypalUrl && !cashUrl && !rumbleUrl) {
-        payButtons.innerHTML = `
-          <p class="text-xs text-flock-warn leading-relaxed">
-            Add your PayPal.me or Cash App $cashtag in
-            <code class="text-flock-dim">js/config.js</code> under
-            <code class="text-flock-dim">payments.paypalMe</code> or
-            <code class="text-flock-dim">payments.cashAppTag</code>.
-          </p>
-          <p class="text-[11px] text-flock-muted leading-relaxed">
-            Example: paypalMe: "https://paypal.me/YourName" · cashAppTag: "YourTag"
-          </p>`;
-      }
-    }
+    if (payButtons) payButtons.innerHTML = "";
 
     if (addrHost) {
       addrHost.innerHTML = "";
-      const btc = (p.crypto?.btc || AppConfig.rumble?.addresses?.btc || "").trim();
-      const usdt = (p.crypto?.usdt || AppConfig.rumble?.addresses?.usdt || "").trim();
-      const net = p.crypto?.usdtNetwork || AppConfig.rumble?.addresses?.usdtNetwork || "";
-      if (btc) addrHost.appendChild(addressRow("Bitcoin (optional)", btc));
-      if (usdt) addrHost.appendChild(addressRow(`USDT optional · ${net || "check network"}`, usdt));
+      const btc = (p.crypto?.btc || "").trim();
+      const usdt = (p.crypto?.usdt || "").trim();
+      const net = p.crypto?.usdtNetwork || "";
+      if (!btc && !usdt) {
+        addrHost.innerHTML = `<p class="text-xs text-flock-warn">No project crypto address configured. App stays free-only.</p>`;
+      } else {
+        if (btc) addrHost.appendChild(addressRow("Bitcoin (BTC)", btc));
+        if (usdt) addrHost.appendChild(addressRow(`USDT · ${net || "correct network only"}`, usdt));
+      }
     }
 
     if (modal) modal.hidden = false;
-  }
-
-  function payLinkButton(label, href, colorClass) {
-    const a = document.createElement("a");
-    a.href = href;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.className = `btn-secondary w-full text-xs text-center font-semibold ${colorClass || ""}`;
-    a.textContent = label;
-    return a;
   }
 
   function addressRow(label, address) {
@@ -324,7 +296,7 @@ const PremiumUI = (() => {
       closeRumblePay();
       return;
     }
-    Premium.unlockPermanent(id, "paypal_cashapp");
+    Premium.unlockPermanent(id, "crypto");
     closeRumblePay();
     renderFeatureList();
     if (id === "tip") toast("Thank you for the tip!", "success");
@@ -332,6 +304,8 @@ const PremiumUI = (() => {
   }
 
   function maybeSoftPrompt() {
+    // Only nudge about crypto support when a project address is configured
+    if (!hasCryptoPayments()) return;
     if (!Premium.shouldShowSoftPrompt()) return;
     const banner = $("support-soft-prompt");
     if (banner) banner.hidden = false;
