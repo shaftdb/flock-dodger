@@ -137,12 +137,160 @@
     reportCount: $("report-count"),
   };
 
+  // ---------- Map focus (auto area / route) ----------
+  /** Default local area radius in miles (mid of ~25–50 mi) */
+  const LOCAL_AREA_RADIUS_MI = 35;
+
+  function milesToLatDelta(miles) {
+    return miles / 69.0;
+  }
+
+  function milesToLngDelta(miles, lat) {
+    const cos = Math.cos((lat * Math.PI) / 180);
+    return miles / (69.0 * Math.max(0.2, cos));
+  }
+
+  /**
+   * Zoom map to a circular-ish region around a point (default ~35 mi radius).
+   * @param {number} lat
+   * @param {number} lng
+   * @param {number} [radiusMiles]
+   * @param {{ animate?: boolean }} [opts]
+   */
+  function focusAreaAround(lat, lng, radiusMiles = LOCAL_AREA_RADIUS_MI, opts = {}) {
+    if (!state.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const r = Math.max(15, Math.min(55, radiusMiles));
+    const dLat = milesToLatDelta(r);
+    const dLng = milesToLngDelta(r, lat);
+    const bounds = L.latLngBounds(
+      [lat - dLat, lng - dLng],
+      [lat + dLat, lng + dLng]
+    );
+    state.map.fitBounds(bounds, {
+      animate: opts.animate !== false,
+      padding: [28, 28],
+      maxZoom: 11,
+    });
+    persistMapView();
+  }
+
+  function persistMapView() {
+    if (!state.map) return;
+    const c = state.map.getCenter();
+    const z = state.map.getZoom();
+    Storage.saveSettings({
+      lastMapView: { lat: c.lat, lng: c.lng, zoom: z, savedAt: Date.now() },
+    });
+  }
+
+  function restoreLastMapView() {
+    const v = Storage.loadSettings().lastMapView;
+    if (!v || !Number.isFinite(v.lat) || !Number.isFinite(v.lng)) return false;
+    // Prefer restoring a local area around last center rather than a zoomed-out continent
+    if (v.zoom && v.zoom >= 8) {
+      state.map.setView([v.lat, v.lng], Math.min(12, Math.max(9, v.zoom)));
+    } else {
+      focusAreaAround(v.lat, v.lng, LOCAL_AREA_RADIUS_MI, { animate: false });
+    }
+    return true;
+  }
+
+  /**
+   * On app start: GPS → ~35 mi area + live cameras; fallback last view / US default.
+   * Also pre-fills Start when empty so trip planning is one field away.
+   */
+  function autoFocusCurrentArea() {
+    if (!state.map) return;
+
+    const finish = () => {
+      setLoading(false);
+      refreshCamerasForView(false);
+      updateMapEmpty();
+    };
+
+    if (!navigator.geolocation) {
+      if (!restoreLastMapView()) {
+        // Rough eastern-US work-trip fallback (not whole continent)
+        focusAreaAround(39.0, -82.5, 45, { animate: false });
+      }
+      finish();
+      return;
+    }
+
+    setLoading(true, "Centering on your area…");
+    setLoadingStep("geo");
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          // Accuracy-based radius: tighter when GPS is good, up to ~50 mi when coarse
+          const accM = pos.coords.accuracy || 5000;
+          let radiusMi = LOCAL_AREA_RADIUS_MI;
+          if (accM > 20000) radiusMi = 50;
+          else if (accM < 100) radiusMi = 28;
+
+          focusAreaAround(lat, lng, radiusMi, { animate: true });
+
+          // Prefill start if user hasn't entered one
+          if (!state.start && !els.startInput?.value?.trim()) {
+            try {
+              setFieldLoading("start", true);
+              const place = await Geocoding.reverse(lat, lng);
+              state.start = place;
+              els.startInput.value = place.display_name;
+              clearFieldError("start");
+              setEndpoints(state.start, state.end);
+            } catch {
+              state.start = {
+                lat,
+                lng,
+                display_name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                type: "gps",
+              };
+              els.startInput.value = state.start.display_name;
+              setEndpoints(state.start, state.end);
+            } finally {
+              setFieldLoading("start", false);
+            }
+          }
+
+          showToast(`Map set to ~${Math.round(radiusMi)} mi around your location`, "success");
+        } finally {
+          finish();
+        }
+      },
+      (err) => {
+        console.warn("Auto-locate failed", err);
+        if (!restoreLastMapView()) {
+          focusAreaAround(39.0, -82.5, 45, { animate: false });
+        }
+        if (err.code === 1) {
+          showToast("Location denied — using last map area. Enable GPS for auto-center.", "error");
+        }
+        finish();
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 5 * 60 * 1000,
+      }
+    );
+  }
+
   // ---------- Map ----------
   function initMap() {
+    // Temporary center; autoFocusCurrentArea replaces this immediately after boot
+    const saved = Storage.loadSettings().lastMapView;
+    const startLat = saved?.lat ?? 39.0;
+    const startLng = saved?.lng ?? -82.5;
+    const startZoom = saved?.zoom && saved.zoom >= 8 ? Math.min(11, saved.zoom) : 9;
+
     state.map = L.map("map", {
       zoomControl: false,
       attributionControl: true,
-    }).setView([39.8283, -98.5795], 4);
+    }).setView([startLat, startLng], startZoom);
 
     L.control.zoom({ position: "bottomright" }).addTo(state.map);
 
@@ -165,11 +313,10 @@
     state.map.on(
       "moveend",
       debounce(() => {
+        persistMapView();
         if (!state.lastPlan) refreshCamerasForView(false);
       }, 550)
     );
-    // First load after tiles
-    setTimeout(() => refreshCamerasForView(false), 400);
 
     // Long-press / right-click to drop start or end (disabled during report pick)
     let pressTimer = null;
@@ -807,13 +954,45 @@
     renderViaHandles(plan);
   }
 
+  /**
+   * Zoom to planned route with padding.
+   * Short routes expand to at least ~20 mi so the corridor (and nearby cameras) stay visible.
+   * Long routes fit fully; max zoom capped so you still see surroundings.
+   */
   function fitToPlan(plan) {
+    if (!state.map || !plan) return;
     const all = [];
-    if (plan.standard?.coords) all.push(...plan.standard.coords);
-    if (plan.avoid?.coords) all.push(...plan.avoid.coords);
-    if (all.length) {
-      state.map.fitBounds(all, { padding: [40, 40], maxZoom: 14 });
-    }
+    if (plan.avoid?.coords?.length) all.push(...plan.avoid.coords);
+    if (plan.standard?.coords?.length) all.push(...plan.standard.coords);
+    if (state.start) all.push([state.start.lat, state.start.lng]);
+    if (state.end) all.push([state.end.lat, state.end.lng]);
+    if (!all.length) return;
+
+    let bounds = L.latLngBounds(all);
+    const center = bounds.getCenter();
+
+    // Minimum visible span (~20 miles half-size → ~40 mi across)
+    const minHalfMi = 12;
+    const dLat = milesToLatDelta(minHalfMi);
+    const dLng = milesToLngDelta(minHalfMi, center.lat);
+    bounds = L.latLngBounds(bounds.getSouthWest(), bounds.getNorthEast());
+    bounds.extend([center.lat - dLat, center.lng - dLng]);
+    bounds.extend([center.lat + dLat, center.lng + dLng]);
+
+    // Extra pad ~15% of span so cameras just off-route stay on screen
+    const padLat = Math.max(0.02, (bounds.getNorth() - bounds.getSouth()) * 0.12);
+    const padLng = Math.max(0.02, (bounds.getEast() - bounds.getWest()) * 0.12);
+    bounds = L.latLngBounds(
+      [bounds.getSouth() - padLat, bounds.getWest() - padLng],
+      [bounds.getNorth() + padLat, bounds.getEast() + padLng]
+    );
+
+    state.map.fitBounds(bounds, {
+      padding: [52, 52],
+      maxZoom: 12,
+      animate: true,
+    });
+    persistMapView();
   }
 
   // ---------- Stats UI ----------
@@ -1479,11 +1658,12 @@
             state.userVias = [];
             els.startInput.value = place.display_name;
             clearFieldError("start");
-            state.map.setView([lat, lng], 13);
+            focusAreaAround(lat, lng, LOCAL_AREA_RADIUS_MI);
             setEndpoints(state.start, state.end);
             updateMapEmpty();
             showToast("Start set to your location", "success");
             if (state.end) await runPlan({ preserveVias: false, quiet: true });
+            else await refreshCamerasForView(false);
           } catch (err) {
             state.start = {
               lat: pos.coords.latitude,
@@ -1491,10 +1671,11 @@
               display_name: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
             };
             els.startInput.value = state.start.display_name;
-            state.map.setView([state.start.lat, state.start.lng], 13);
+            focusAreaAround(state.start.lat, state.start.lng, LOCAL_AREA_RADIUS_MI);
             setEndpoints(state.start, state.end);
             updateMapEmpty();
             showToast("Start set (address lookup limited)", "success");
+            await refreshCamerasForView(false);
           } finally {
             setLoading(false);
             els.btnLocate.classList.remove("is-loading");
@@ -1932,6 +2113,8 @@
     updateMapEmpty();
     updateOnlineStatus();
     refreshCommunityUI();
+    // GPS → ~25–50 mi local area + live cameras (no manual zoom needed)
+    autoFocusCurrentArea();
 
     console.info(
       "%cFlock Dodger%c ready — privacy-first routing",
