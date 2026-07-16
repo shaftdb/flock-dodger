@@ -1605,59 +1605,6 @@
     els.btnRouteRetry?.addEventListener("click", () => runPlan({ preserveVias: true }));
     els.btnRouteErrorDismiss?.addEventListener("click", clearRouteError);
 
-    async function loadDemo(start, end) {
-      state.start = start;
-      state.end = end;
-      state.userVias = [];
-      clearFieldError("start");
-      clearFieldError("end");
-      clearRouteError();
-      els.startInput.value = start.display_name;
-      els.endInput.value = end.display_name;
-      await runPlan({ preserveVias: false });
-    }
-
-    const btnDemo = $("btn-demo");
-    if (btnDemo) {
-      btnDemo.addEventListener("click", () =>
-        loadDemo(
-          {
-            lat: 30.2635,
-            lng: -97.7395,
-            display_name: "Austin Convention Center, Austin, Texas",
-            type: "demo",
-          },
-          {
-            lat: 30.2639,
-            lng: -97.7713,
-            display_name: "Barton Springs Pool, Austin, Texas",
-            type: "demo",
-          }
-        )
-      );
-    }
-
-    // Parkersburg WV → Athens OH — dense mock camera corridor
-    const btnDemoWv = $("btn-demo-wv");
-    if (btnDemoWv) {
-      btnDemoWv.addEventListener("click", () =>
-        loadDemo(
-          {
-            lat: 39.2667,
-            lng: -81.5615,
-            display_name: "Downtown Parkersburg, West Virginia",
-            type: "demo",
-          },
-          {
-            lat: 39.3292,
-            lng: -82.1013,
-            display_name: "Downtown Athens, Ohio",
-            type: "demo",
-          }
-        )
-      );
-    }
-
     els.btnSwap.addEventListener("click", () => {
       const tmp = state.start;
       state.start = state.end;
