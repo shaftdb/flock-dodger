@@ -12,6 +12,7 @@ const SHELL = [
   "./js/config.js",
   "./js/camera-data.js",
   "./js/cameras.js",
+  "./js/overpass.js",
   "./js/geocoding.js",
   "./js/routing.js",
   "./js/storage.js",

@@ -69,4 +69,17 @@ const AppConfig = {
     turn_by_turn: { amount: 5.99, label: "$5.99" },
     bundle: { amount: 9.99, label: "$9.99", note: "All premium features" },
   },
+
+  /**
+   * Live cameras from OpenStreetMap (Overpass).
+   * Community-mapped ALPR / Flock nodes — best free accuracy source for trips.
+   */
+  cameras: {
+    /** Prefer OSM Overpass when online (recommended for real trips) */
+    useLiveOsm: true,
+    /** Include built-in mock / procedural points (off by default for accuracy) */
+    useMockData: false,
+    /** Include your localStorage community reports */
+    useCommunityReports: true,
+  },
 };

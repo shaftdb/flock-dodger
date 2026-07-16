@@ -28,7 +28,11 @@
     showAvoid: true,
     showBuffers: false,
     showCommunity: true,
+    useLiveOsm: true,
+    useMockData: false,
     reportPickMode: false,
+    osmFetchAbort: null,
+    lastOsmCameras: [],
     /** Which planned geometry to hand off to external maps */
     exportRoute: "avoid", // "avoid" | "standard"
     /** User-dragged intermediate points on the avoid route */
@@ -106,6 +110,10 @@
     toggleAvoid: $("toggle-avoid"),
     toggleBuffers: $("toggle-buffers"),
     toggleCommunity: $("toggle-community"),
+    toggleLiveOsm: $("toggle-live-osm"),
+    toggleMockData: $("toggle-mock-data"),
+    osmStatus: $("osm-status"),
+    btnRefreshOsm: $("btn-refresh-osm"),
     btnReport: $("btn-report"),
     btnReportOpen: $("btn-report-open"),
     reportModal: $("report-modal"),
@@ -153,9 +161,15 @@
     state.layers.vias = L.layerGroup().addTo(state.map);
     state.layers.preview = L.layerGroup().addTo(state.map);
 
-    // Initial sample cameras around continental US view — sparse until route planned
-    refreshCamerasForView();
-    state.map.on("moveend", debounce(refreshCamerasForView, 400));
+    // Live OSM load when map settles (debounced)
+    state.map.on(
+      "moveend",
+      debounce(() => {
+        if (!state.lastPlan) refreshCamerasForView(false);
+      }, 550)
+    );
+    // First load after tiles
+    setTimeout(() => refreshCamerasForView(false), 400);
 
     // Long-press / right-click to drop start or end (disabled during report pick)
     let pressTimer = null;
@@ -257,34 +271,126 @@
     };
   }
 
-  /** Merge dataset cameras with local community reports */
-  function collectCameras(bounds) {
-    const base = CameraData.getCamerasInBounds(bounds);
-    if (!state.showCommunity) return base;
-    const community = Storage.reportsAsCameras(bounds);
-    // Community IDs win over procedural collisions
-    const seen = new Set(community.map((c) => c.id));
-    return [...community, ...base.filter((c) => !seen.has(c.id))];
+  function updateOsmStatusText() {
+    if (!els.osmStatus) return;
+    if (!state.useLiveOsm) {
+      els.osmStatus.textContent = "Live OSM off — using mock and/or your reports only.";
+      return;
+    }
+    if (typeof OverpassCameras === "undefined") {
+      els.osmStatus.textContent = "Live module missing.";
+      return;
+    }
+    const st = OverpassCameras.getStatus();
+    if (st.error && !st.ok) {
+      els.osmStatus.textContent = `Live: ${st.error}`;
+      return;
+    }
+    if (st.ok) {
+      const src = st.source === "cache" ? "cached" : st.source || "OSM";
+      els.osmStatus.textContent = `Live: ${st.count} ALPR point${st.count === 1 ? "" : "s"} (${src}). Mapped by OSM contributors — not 100% complete.`;
+      return;
+    }
+    els.osmStatus.textContent = "Live data idle — pan the map or plan a route to load cameras.";
   }
 
-  function refreshCamerasForView() {
+  /**
+   * Collect cameras for routing/map: live OSM + optional mock + community.
+   * @param {object} bounds
+   * @param {{forceLive?: boolean, signal?: AbortSignal}} [opts]
+   */
+  async function collectCameras(bounds, opts = {}) {
+    const parts = [];
+
+    if (state.useLiveOsm && typeof OverpassCameras !== "undefined") {
+      try {
+        const live = await OverpassCameras.fetchInBounds(bounds, {
+          force: opts.forceLive,
+          signal: opts.signal,
+          pad: 0.03,
+        });
+        state.lastOsmCameras = live;
+        parts.push(...live);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.warn("Live OSM fetch failed", err);
+          showToast(friendlyError(err, "Could not load live OSM cameras"), "error");
+        }
+      }
+      updateOsmStatusText();
+    }
+
+    if (state.useMockData) {
+      parts.push(...CameraData.getCamerasInBounds(bounds));
+    }
+
+    if (state.showCommunity) {
+      parts.push(...Storage.reportsAsCameras(bounds));
+    }
+
+    // Dedupe by rounded lat/lng (prefer live/community over mock)
+    const rank = (c) => {
+      if (c.community || c.source === "community") return 0;
+      if (c.live || c.source === "openstreetmap") return 1;
+      return 2;
+    };
+    parts.sort((a, b) => rank(a) - rank(b));
+    const seen = new Set();
+    const out = [];
+    for (const c of parts) {
+      const key = c.id || `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      // Also dedupe near-identical coordinates from mock vs OSM
+      const geo = `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`;
+      if (seen.has(geo)) continue;
+      seen.add(key);
+      seen.add(geo);
+      out.push(c);
+    }
+    return out;
+  }
+
+  async function refreshCamerasForView(force = false) {
     if (!state.map || state.lastPlan) return; // while a plan is active, cameras are set by plan
-    const cameras = collectCameras(boundsFromMap());
-    state.cameras = cameras;
-    renderCameraMarkers(cameras, new Set());
+    if (state.osmFetchAbort) {
+      try {
+        state.osmFetchAbort.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+    state.osmFetchAbort = new AbortController();
+    try {
+      if (els.osmStatus && state.useLiveOsm) {
+        els.osmStatus.textContent = "Loading live OSM cameras…";
+      }
+      const cameras = await collectCameras(boundsFromMap(), {
+        forceLive: force,
+        signal: state.osmFetchAbort.signal,
+      });
+      state.cameras = cameras;
+      renderCameraMarkers(cameras, new Set());
+      updateOsmStatusText();
+    } catch (err) {
+      if (err.name !== "AbortError") console.warn(err);
+    }
   }
 
-  function cameraIcon(nearRoute, community) {
+  function cameraIcon(nearRoute, cam) {
+    const community = cam?.community || cam?.source === "community";
+    const mock = cam?.source === "procedural-demo" || cam?.source === "mock-corridor" || cam?.source === "corridor-mock" || cam?.source === "placeholder" || cam?.source === "community-pattern";
     const cls = [
       "camera-marker",
       nearRoute ? "near-route" : "",
       community ? "community" : "",
+      mock && !community ? "mock" : "",
     ]
       .filter(Boolean)
       .join(" ");
+    const title = community ? "Your report" : cam?.live || cam?.source === "openstreetmap" ? "OSM ALPR" : "Demo camera";
     return L.divIcon({
       className: "",
-      html: `<div class="${cls}" title="${community ? "Community report" : "ALPR camera"}">
+      html: `<div class="${cls}" title="${title}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       </div>`,
       iconSize: [28, 28],
@@ -374,7 +480,7 @@
       if (cam.community && !state.showCommunity) return;
       const near = highlightIds.has(cam.id);
       const marker = L.marker([cam.lat, cam.lng], {
-        icon: cameraIcon(near, cam.community || cam.source === "community"),
+        icon: cameraIcon(near, cam),
         keyboard: true,
         title: cam.name,
       });
@@ -385,14 +491,27 @@
       const notes = cam.notes
         ? `<br/><span style="color:#9fb5a8;font-size:11px">${escapeHtml(cam.notes)}</span>`
         : "";
+      const mfr = cam.manufacturer || cam.operator
+        ? `<br/><span style="color:#6b8578;font-size:11px">${escapeHtml([cam.manufacturer, cam.operator].filter(Boolean).join(" · "))}</span>`
+        : "";
+      const osmLink =
+        cam.osmId
+          ? `<br/><a href="https://www.openstreetmap.org/${cam.osmType || "node"}/${cam.osmId}" target="_blank" rel="noopener" style="color:#3dd68c;font-size:11px">View on OSM</a>`
+          : "";
       const del =
         cam.community || cam.source === "community"
           ? `<br/><button type="button" class="popup-del-report" data-report-id="${escapeHtml(cam.id)}" style="margin-top:6px;font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Remove report</button>`
           : "";
+      const sourceLabel =
+        cam.source === "openstreetmap"
+          ? "OpenStreetMap (live)"
+          : cam.source === "community"
+            ? "Your report"
+            : escapeHtml(cam.source || "unknown");
       marker.bindPopup(
         `<strong>${escapeHtml(cam.name)}</strong><br/>
          <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span><br/>
-         <span style="color:#6b8578;font-size:11px">Source: ${escapeHtml(cam.source)}</span>${conf}${notes}${del}`
+         <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}`
       );
       marker.on("popupopen", () => {
         const btn = document.querySelector(`.popup-del-report[data-report-id="${cam.id}"]`);
@@ -423,16 +542,13 @@
     });
   }
 
-  function refreshCamerasAfterReportChange() {
+  async function refreshCamerasAfterReportChange() {
     if (state.lastPlan && state.start && state.end) {
-      // Re-score routes with new community points
-      runPlan({ preserveVias: true, quiet: true });
+      await runPlan({ preserveVias: true, quiet: true });
       return;
     }
     if (state.map) {
-      const cameras = collectCameras(boundsFromMap());
-      state.cameras = cameras;
-      renderCameraMarkers(cameras, new Set());
+      await refreshCamerasForView(true);
     }
   }
 
@@ -808,11 +924,17 @@
       bounds.minLng -= padLng;
       bounds.maxLng += padLng;
 
-      const cameras = collectCameras(bounds);
+      setLoading(true, state.useLiveOsm ? "Loading live OSM cameras…" : "Loading cameras…");
+      const cameras = await collectCameras(bounds, { forceLive: false });
       state.cameras = cameras;
 
       setLoadingStep("score");
-      setLoading(true, "Scoring camera exposure…");
+      setLoading(
+        true,
+        cameras.length
+          ? `Scoring ${cameras.length} cameras…`
+          : "Scoring camera exposure…"
+      );
 
       if (opts.preserveVias === false) {
         state.userVias = [];
@@ -1530,6 +1652,27 @@
       Storage.saveSettings({ showCommunity: state.showCommunity });
       refreshCamerasAfterReportChange();
     });
+    els.toggleLiveOsm?.addEventListener("change", () => {
+      state.useLiveOsm = els.toggleLiveOsm.checked;
+      Storage.saveSettings({ useLiveOsm: state.useLiveOsm });
+      updateOsmStatusText();
+      refreshCamerasAfterReportChange();
+    });
+    els.toggleMockData?.addEventListener("change", () => {
+      state.useMockData = els.toggleMockData.checked;
+      Storage.saveSettings({ useMockData: state.useMockData });
+      refreshCamerasAfterReportChange();
+    });
+    els.btnRefreshOsm?.addEventListener("click", async () => {
+      if (typeof OverpassCameras !== "undefined") OverpassCameras.clearCache();
+      if (state.lastPlan && state.start && state.end) {
+        showToast("Refreshing live cameras & re-scoring route…", "success");
+        await runPlan({ preserveVias: true, quiet: true });
+      } else {
+        showToast("Refreshing live OSM cameras…", "success");
+        await refreshCamerasForView(true);
+      }
+    });
 
     // Community report form
     setupReportForm();
@@ -1735,6 +1878,20 @@
       state.showCommunity = settings.showCommunity;
       if (els.toggleCommunity) els.toggleCommunity.checked = settings.showCommunity;
     }
+    // Live OSM defaults ON for real trips; mock OFF unless user enabled it
+    if (typeof AppConfig !== "undefined" && AppConfig.cameras) {
+      state.useLiveOsm = AppConfig.cameras.useLiveOsm !== false;
+      state.useMockData = AppConfig.cameras.useMockData === true;
+    }
+    if (typeof settings.useLiveOsm === "boolean") {
+      state.useLiveOsm = settings.useLiveOsm;
+    }
+    if (typeof settings.useMockData === "boolean") {
+      state.useMockData = settings.useMockData;
+    }
+    if (els.toggleLiveOsm) els.toggleLiveOsm.checked = state.useLiveOsm;
+    if (els.toggleMockData) els.toggleMockData.checked = state.useMockData;
+    updateOsmStatusText();
 
     PWA.init({
       onPromptAvailable(available) {

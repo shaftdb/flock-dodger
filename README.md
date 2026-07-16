@@ -74,7 +74,9 @@ No backend of your own is required for the prototype.
 
 ## Notes & limits
 
-- Camera points are **illustrative** (~440+ named/corridor mocks in `js/camera-data.js`, dense for **Ohio & West Virginia**, plus US metros). Procedural fill is denser in the OH/WV hot region. Not a complete or verified real-world inventory.
+- **Live cameras (default):** OpenStreetMap via Overpass (`js/overpass.js`) — community-mapped ALPR / Flock nodes (same ecosystem as DeFlock). Coverage is incomplete; zoom in or plan a route to load a bbox. Cached 1 hour in localStorage.
+- **Demo mock cameras** are **off by default** (toggle in Camera data). Built-in `camera-data.js` is only for demos.
+- Your **community reports** still merge in from localStorage.
 - **WV / OH demo** button: Parkersburg, WV → Athens, OH (good camera-rich corridor).
 - Public OSRM / Nominatim rate limits apply; heavy use may need self-hosted instances.
 - Avoidance is a **simulation**: offset via-points + alternative route scoring, not guaranteed camera-free navigation.
