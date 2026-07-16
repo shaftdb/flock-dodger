@@ -29,7 +29,6 @@
     showBuffers: false,
     showCommunity: true,
     useLiveOsm: true,
-    useMockData: false,
     reportPickMode: false,
     osmFetchAbort: null,
     lastOsmCameras: [],
@@ -111,7 +110,6 @@
     toggleBuffers: $("toggle-buffers"),
     toggleCommunity: $("toggle-community"),
     toggleLiveOsm: $("toggle-live-osm"),
-    toggleMockData: $("toggle-mock-data"),
     osmStatus: $("osm-status"),
     btnRefreshOsm: $("btn-refresh-osm"),
     btnReport: $("btn-report"),
@@ -355,7 +353,7 @@
   function updateOsmStatusText() {
     if (!els.osmStatus) return;
     if (!state.useLiveOsm) {
-      els.osmStatus.textContent = "Live OSM off — using mock and/or your reports only.";
+      els.osmStatus.textContent = "Live OSM off — only your community reports will show.";
       return;
     }
     if (typeof OverpassCameras === "undefined") {
@@ -410,15 +408,11 @@
       updateOsmStatusText();
     }
 
-    if (state.useMockData) {
-      // Density 6 keeps procedural fill tiny
-      parts.push(...CameraData.getCamerasInBounds(safeBounds, 6));
-    }
-
     if (state.showCommunity) {
       parts.push(...Storage.reportsAsCameras(safeBounds));
     }
 
+    // Prefer community reports over OSM if same spot
     const rank = (c) => {
       if (c.community || c.source === "community") return 0;
       if (c.live || c.source === "openstreetmap") return 1;
@@ -469,22 +463,14 @@
 
   function cameraIcon(nearRoute, cam) {
     const community = cam?.community || cam?.source === "community";
-    const mock =
-      cam?.source === "procedural-demo" ||
-      cam?.source === "mock-corridor" ||
-      cam?.source === "corridor-mock" ||
-      cam?.source === "placeholder" ||
-      cam?.source === "community-pattern";
     const cls = [
       "camera-marker",
       "camera-marker--lite",
       nearRoute ? "near-route" : "",
       community ? "community" : "",
-      mock && !community ? "mock" : "",
     ]
       .filter(Boolean)
       .join(" ");
-    // Minimal DOM — full SVG icons were a major mobile memory cost at scale
     return L.divIcon({
       className: "",
       html: `<div class="${cls}"></div>`,
@@ -1850,11 +1836,6 @@
       updateOsmStatusText();
       refreshCamerasAfterReportChange();
     });
-    els.toggleMockData?.addEventListener("change", () => {
-      state.useMockData = els.toggleMockData.checked;
-      Storage.saveSettings({ useMockData: state.useMockData });
-      refreshCamerasAfterReportChange();
-    });
     els.btnRefreshOsm?.addEventListener("click", async () => {
       if (typeof OverpassCameras !== "undefined") OverpassCameras.clearCache();
       if (state.lastPlan && state.start && state.end) {
@@ -2070,19 +2051,13 @@
       state.showCommunity = settings.showCommunity;
       if (els.toggleCommunity) els.toggleCommunity.checked = settings.showCommunity;
     }
-    // Live OSM defaults ON for real trips; mock OFF unless user enabled it
     if (typeof AppConfig !== "undefined" && AppConfig.cameras) {
       state.useLiveOsm = AppConfig.cameras.useLiveOsm !== false;
-      state.useMockData = AppConfig.cameras.useMockData === true;
     }
     if (typeof settings.useLiveOsm === "boolean") {
       state.useLiveOsm = settings.useLiveOsm;
     }
-    if (typeof settings.useMockData === "boolean") {
-      state.useMockData = settings.useMockData;
-    }
     if (els.toggleLiveOsm) els.toggleLiveOsm.checked = state.useLiveOsm;
-    if (els.toggleMockData) els.toggleMockData.checked = state.useMockData;
     updateOsmStatusText();
 
     PWA.init({

@@ -8,7 +8,7 @@ Privacy-first web app for planning routes that avoid Flock Safety and ALPR camer
 
 - **Start / end geocoding** via OpenStreetMap Nominatim
 - **Standard vs camera-avoiding routes** (OSRM routing + avoidance waypoints)
-- **Interactive dark map** with ALPR markers (placeholder + procedural demo dataset)
+- **Interactive dark map** with live OSM ALPR markers + your local reports
 - **Avoidance buffer slider** (50–500 m)
 - **Privacy score & stats** — cameras avoided, residual exposure, extra distance/time
 - **Saved routes** in `localStorage` (device-only)
@@ -74,9 +74,9 @@ No backend of your own is required for the prototype.
 
 ## Notes & limits
 
-- **Live cameras (default):** OpenStreetMap via Overpass (`js/overpass.js`) — community-mapped ALPR / Flock nodes (same ecosystem as DeFlock). Coverage is incomplete; zoom in or plan a route to load a bbox. Cached 1 hour in localStorage.
-- **Demo mock cameras** are **off by default** (toggle in Camera data). Built-in `camera-data.js` is only for demos.
-- Your **community reports** still merge in from localStorage.
+- **Live cameras:** OpenStreetMap via Overpass (`js/overpass.js`) — community-mapped ALPR / Flock nodes. Coverage varies by area.
+- **Community reports** merge from this device’s localStorage only.
+- No built-in mock camera dataset.
 - **WV / OH demo** button: Parkersburg, WV → Athens, OH (good camera-rich corridor).
 - Public OSRM / Nominatim rate limits apply; heavy use may need self-hosted instances.
 - Avoidance is a **simulation**: offset via-points + alternative route scoring, not guaranteed camera-free navigation.

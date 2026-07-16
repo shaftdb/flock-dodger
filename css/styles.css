@@ -663,13 +663,7 @@ html, body {
   color: #ddd6fe;
 }
 
-.camera-marker.mock {
-  background: rgba(107, 133, 120, 0.2);
-  border-color: #6b8578;
-  color: #9fb5a8;
-  box-shadow: none;
-  opacity: 0.85;
-}
+
 
 .camera-marker svg {
   width: 14px;

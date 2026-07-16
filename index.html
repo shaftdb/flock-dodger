@@ -331,16 +331,6 @@
                 </span>
                 <input type="checkbox" id="toggle-live-osm" class="toggle" checked />
               </label>
-              <label class="toggle-row">
-                <span class="flex items-center gap-2 text-sm min-w-0">
-                  <span class="h-2 w-2 shrink-0 rounded-full bg-flock-muted"></span>
-                  <span class="min-w-0">
-                    <span class="block">Demo mock cameras</span>
-                    <span class="block text-[10px] text-flock-muted font-normal normal-case tracking-normal">Built-in placeholders — leave off for trips</span>
-                  </span>
-                </span>
-                <input type="checkbox" id="toggle-mock-data" class="toggle" />
-              </label>
               <div class="rounded-xl border border-flock-border bg-flock-bg/60 px-3 py-2 text-[11px] text-flock-dim">
                 <p id="osm-status" class="leading-relaxed">Live data idle — pan the map or plan a route to load cameras.</p>
                 <button type="button" id="btn-refresh-osm" class="mt-1.5 text-flock-accent font-medium hover:underline">Refresh live cameras</button>
@@ -471,7 +461,6 @@
             <p class="font-medium text-flock-dim mb-1">Legend</p>
             <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-flock-danger"></span> OSM ALPR (live)</div>
             <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-violet-400"></span> Your report</div>
-            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-flock-muted"></span> Demo mock</div>
             <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-route rounded"></span> Standard route</div>
             <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-avoid rounded"></span> Avoidance route</div>
             <div class="flex items-center gap-2"><span class="via-dot-sm"></span> Drag handle</div>
@@ -711,7 +700,6 @@
   <!-- Stripe.js (only used when publishableKey is set) -->
   <script src="https://js.stripe.com/v3/"></script>
   <script src="js/config.js"></script>
-  <script src="js/camera-data.js"></script>
   <script src="js/cameras.js"></script>
   <script src="js/overpass.js"></script>
   <script src="js/geocoding.js"></script>

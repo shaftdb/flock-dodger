@@ -71,15 +71,10 @@ const AppConfig = {
   },
 
   /**
-   * Live cameras from OpenStreetMap (Overpass).
-   * Community-mapped ALPR / Flock nodes — best free accuracy source for trips.
+   * Cameras from OpenStreetMap (Overpass) + your local community reports only.
    */
   cameras: {
-    /** Prefer OSM Overpass when online (recommended for real trips) */
     useLiveOsm: true,
-    /** Include built-in mock / procedural points (off by default for accuracy) */
-    useMockData: false,
-    /** Include your localStorage community reports */
     useCommunityReports: true,
   },
 };
