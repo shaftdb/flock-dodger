@@ -41,8 +41,6 @@ See **[DEPLOY.md](./DEPLOY.md)** for:
 
 This repo includes a GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) that publishes the site when you push to `main`.
 
-> **Tip:** Try **WV / OH demo** or an Austin pair — the mock camera dataset is densest there.
-
 ## Privacy model
 
 | Data | Where it goes |
@@ -76,10 +74,9 @@ No backend of your own is required for the prototype.
 - **Live cameras:** OpenStreetMap via Overpass (`js/overpass.js`) — community-mapped ALPR / Flock nodes. Coverage varies by area.
 - **Community reports** merge from this device’s localStorage only.
 - No built-in mock camera dataset.
-- **WV / OH demo** button: Parkersburg, WV → Athens, OH (good camera-rich corridor).
 - Public OSRM / Nominatim rate limits apply; heavy use may need self-hosted instances.
 - Avoidance is a **simulation**: offset via-points + alternative route scoring, not guaranteed camera-free navigation.
-- Offline map packs remain demo stubs after unlock; the service worker caches the app shell only.
+- Offline map packs remain stubs after unlock; the service worker caches the app shell only.
 
 ## Support & Stripe
 
