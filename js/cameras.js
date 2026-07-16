@@ -227,19 +227,26 @@ const CameraData = (() => {
       const dLng = next[1] - prev[1];
       const len = Math.hypot(dLat, dLng) || 1e-9;
 
-      const meters = bufferMeters * 1.6 + 80;
+      // Modest lateral offset only — large offsets force OSRM onto parallel
+      // side streets and create short green "spur" segments off the main route.
+      const meters = Math.min(180, Math.max(60, bufferMeters * 0.7));
       const latPerM = 1 / 111320;
       const lngPerM = 1 / (111320 * Math.cos((cLat * Math.PI) / 180));
       const nLat = -dLng / len;
       const nLng = dLat / len;
 
+      // Also bias slightly forward along the route so the via is past the camera
+      const along = 0.35;
+      const baseLat = routeCoords[bestIdx][0] + (dLat / len) * along * meters * latPerM;
+      const baseLng = routeCoords[bestIdx][1] + (dLng / len) * along * meters * lngPerM;
+
       const side1 = {
-        lat: routeCoords[bestIdx][0] + nLat * meters * latPerM,
-        lng: routeCoords[bestIdx][1] + nLng * meters * lngPerM,
+        lat: baseLat + nLat * meters * latPerM,
+        lng: baseLng + nLng * meters * lngPerM,
       };
       const side2 = {
-        lat: routeCoords[bestIdx][0] - nLat * meters * latPerM,
-        lng: routeCoords[bestIdx][1] - nLng * meters * lngPerM,
+        lat: baseLat - nLat * meters * latPerM,
+        lng: baseLng - nLng * meters * lngPerM,
       };
 
       const scoreSide = (s) =>
@@ -253,7 +260,8 @@ const CameraData = (() => {
       waypoints.push(wp);
     }
 
-    return waypoints.slice(0, 8);
+    // Few vias — each extra via increases spur risk
+    return waypoints.slice(0, 4);
   }
 
   function getStats() {

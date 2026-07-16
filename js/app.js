@@ -977,12 +977,21 @@
     state.layers.avoid.clearLayers();
     state.layers.preview.clearLayers();
 
+    const sameAsStandard =
+      plan.avoid &&
+      plan.standard &&
+      Math.abs((plan.avoid.distance || 0) - (plan.standard.distance || 0)) < 40 &&
+      plan.avoid.coords?.length &&
+      plan.standard.coords?.length &&
+      plan.avoid.coords.length === plan.standard.coords.length;
+
     if (plan.standard?.coords?.length) {
       const line = L.polyline(plan.standard.coords, {
         color: "#38bdf8",
         weight: 5,
-        opacity: 0.75,
+        opacity: sameAsStandard ? 0.35 : 0.75,
         lineJoin: "round",
+        lineCap: "round",
         dashArray: "10 8",
         interactive: false,
       });
@@ -995,6 +1004,9 @@
         weight: 6,
         opacity: 0.95,
         lineJoin: "round",
+        lineCap: "round",
+        // Smooth short kinks from GPS noise without inventing new branches
+        smoothFactor: 1.2,
         interactive: true,
       });
       // Click on avoid route to add a via at nearest point
