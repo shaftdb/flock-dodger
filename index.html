@@ -83,7 +83,7 @@
         </div>
 
         <div class="flex items-center gap-1.5 sm:gap-2">
-          <button id="btn-premium" type="button" class="btn-icon relative" title="Premium unlocks" aria-label="Premium unlocks">
+          <button id="btn-premium" type="button" class="btn-icon relative" title="Support Flock Dodger" aria-label="Support Flock Dodger">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6L12 2z"/></svg>
             <span id="premium-dot" class="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-flock-accent hidden" aria-hidden="true"></span>
           </button>
@@ -399,24 +399,34 @@
             <p id="community-empty" class="text-[11px] text-flock-muted text-center py-3">No local reports yet.</p>
           </section>
 
-          <!-- Premium features -->
+          <!-- Support (optional — core is free) -->
           <section aria-labelledby="premium-heading">
             <div class="flex items-center justify-between mb-2">
-              <h2 id="premium-heading" class="section-label mb-0">Premium</h2>
-              <button type="button" id="btn-premium-open" class="text-[11px] font-medium text-flock-accent hover:underline">Unlock options</button>
+              <h2 id="premium-heading" class="section-label mb-0">Support</h2>
+              <button type="button" id="btn-premium-open" class="text-[11px] font-medium text-flock-accent hover:underline">Why free?</button>
             </div>
             <div id="premium-feature-list" class="space-y-2">
               <!-- filled by premium UI -->
             </div>
-            <div class="mt-2 rounded-xl border border-flock-border bg-flock-bg/60 px-3 py-2.5">
+            <div class="mt-2 rounded-xl border border-flock-border bg-flock-bg/60 px-3 py-2.5 space-y-2">
               <div class="flex items-center justify-between gap-2">
                 <div>
-                  <p class="text-sm font-medium">Full bundle</p>
-                  <p class="text-[11px] text-flock-muted">All premium features · one-time</p>
+                  <p class="text-sm font-medium">Supporter</p>
+                  <p class="text-[11px] text-flock-muted">One-time · no subscription</p>
                 </div>
                 <div class="text-right shrink-0">
-                  <p id="bundle-price" class="text-sm font-mono text-flock-accent font-semibold">$9.99</p>
-                  <button type="button" id="btn-buy-bundle" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">Buy with Stripe</button>
+                  <p id="bundle-price" class="text-sm font-mono text-flock-accent font-semibold">$14.99</p>
+                  <button type="button" id="btn-buy-bundle" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">Become a Supporter</button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between gap-2 border-t border-flock-border pt-2">
+                <div>
+                  <p class="text-sm font-medium">Tip jar</p>
+                  <p class="text-[11px] text-flock-muted">Optional · no unlock required</p>
+                </div>
+                <div class="text-right shrink-0">
+                  <p id="tip-price" class="text-sm font-mono text-flock-dim font-semibold">$3</p>
+                  <button type="button" id="btn-buy-tip" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">Leave a tip</button>
                 </div>
               </div>
             </div>
@@ -600,12 +610,12 @@
     </div>
   </div>
 
-  <!-- Premium unlock modal -->
+  <!-- Support modal -->
   <div id="premium-modal" class="modal" hidden>
     <div class="modal-backdrop" data-close-premium></div>
     <div class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="premium-modal-title">
       <div class="flex items-center justify-between mb-3">
-        <h2 id="premium-modal-title" class="text-lg font-semibold">Unlock feature</h2>
+        <h2 id="premium-modal-title" class="text-lg font-semibold">Support Flock Dodger</h2>
         <button type="button" class="btn-icon" data-close-premium aria-label="Close">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -616,39 +626,19 @@
     </div>
   </div>
 
-  <!-- Rewarded ad placeholder modal -->
-  <div id="ad-modal" class="modal" hidden>
-    <div class="modal-backdrop"></div>
-    <div class="modal-panel max-w-sm" role="dialog" aria-modal="true" aria-labelledby="ad-modal-title">
-      <p class="text-[10px] uppercase tracking-wider text-flock-muted font-semibold mb-2">Sponsored · placeholder</p>
-      <h2 id="ad-modal-title" class="text-base font-semibold mb-1">Watch to unlock</h2>
-      <p id="ad-modal-sub" class="text-xs text-flock-muted mb-4">Stay on this screen until the reward is ready.</p>
-
-      <div class="ad-stage" aria-hidden="true">
-        <div class="ad-stage-inner">
-          <div class="ad-badge">AD</div>
-          <p class="text-sm font-medium text-white/90">Privacy-friendly brands</p>
-          <p class="text-xs text-white/60 mt-1">Rewarded ad SDK placeholder</p>
-          <div class="ad-bars" aria-hidden="true">
-            <span></span><span></span><span></span><span></span>
-          </div>
-        </div>
+  <!-- Soft support prompt (rare, after successful route — never blocks) -->
+  <div id="support-soft-prompt" class="support-soft-prompt" hidden role="dialog" aria-label="Optional support">
+    <div class="flex items-start gap-3">
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium">Route ready</p>
+        <p class="text-xs text-flock-muted mt-0.5 leading-relaxed">Core stays free. If this helped, optional support keeps it that way for everyone.</p>
       </div>
-
-      <div class="mt-4">
-        <div class="flex justify-between text-[11px] text-flock-muted mb-1.5">
-          <span id="ad-status">Loading ad…</span>
-          <span id="ad-countdown" class="font-mono">—</span>
-        </div>
-        <div class="ad-progress-track">
-          <div id="ad-progress-bar" class="ad-progress-bar" style="width:0%"></div>
-        </div>
-      </div>
-
-      <div class="flex gap-2 mt-4">
-        <button type="button" id="btn-ad-cancel" class="btn-secondary flex-1 text-xs">Cancel</button>
-        <button type="button" id="btn-ad-claim" class="btn-primary flex-1 text-xs" disabled>Claim reward</button>
-      </div>
+      <button type="button" id="btn-soft-dismiss" class="btn-icon h-8 w-8 shrink-0" aria-label="Dismiss">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex gap-2 mt-3">
+      <button type="button" id="btn-soft-support" class="btn-primary flex-1 text-xs py-1.5">Optional support</button>
     </div>
   </div>
 

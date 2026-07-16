@@ -15,8 +15,7 @@ Privacy-first web app for planning routes that avoid Flock Safety and ALPR camer
 - **Export to maps** — open planned route in Google Maps, Apple Maps, or Waze
 - **Community camera reports** — form saves sightings to `localStorage` and includes them in routing/map
 - **PWA** — installable, offline app shell via service worker
-- **Premium unlocks** — rewarded ad placeholder (timed unlock) + Stripe one-time checkout (permanent)
-- **Premium tools** — offline pack / live intel / turn-by-turn demos when unlocked
+- **Support (optional)** — free core forever; one-time Supporter / tip via Stripe; **no ads** (see [MONETIZATION.md](./MONETIZATION.md))
 
 ## Quick start
 

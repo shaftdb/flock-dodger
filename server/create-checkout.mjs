@@ -25,10 +25,13 @@ const PORT = Number(process.env.PORT || 4242);
 const SECRET = process.env.STRIPE_SECRET_KEY || "";
 
 const PRICE_IDS = {
+  supporter: process.env.STRIPE_PRICE_SUPPORTER || process.env.STRIPE_PRICE_BUNDLE || "",
+  tip: process.env.STRIPE_PRICE_TIP || "",
+  // Legacy aliases → supporter
   offline: process.env.STRIPE_PRICE_OFFLINE || "",
   live_intel: process.env.STRIPE_PRICE_LIVE_INTEL || "",
   turn_by_turn: process.env.STRIPE_PRICE_TURN_BY_TURN || "",
-  bundle: process.env.STRIPE_PRICE_BUNDLE || "",
+  bundle: process.env.STRIPE_PRICE_BUNDLE || process.env.STRIPE_PRICE_SUPPORTER || "",
 };
 
 const MIME = {
@@ -49,10 +52,13 @@ async function createCheckoutSession(body) {
     throw err;
   }
 
-  const featureId = body.featureId;
-  const price = PRICE_IDS[featureId];
+  let featureId = body.featureId;
+  if (featureId === "bundle" || featureId === "offline" || featureId === "live_intel" || featureId === "turn_by_turn") {
+    featureId = PRICE_IDS.supporter ? "supporter" : featureId;
+  }
+  const price = PRICE_IDS[featureId] || PRICE_IDS.supporter;
   if (!price) {
-    const err = new Error(`No price configured for feature "${featureId}"`);
+    const err = new Error(`No price configured for "${featureId}" (set STRIPE_PRICE_SUPPORTER or STRIPE_PRICE_TIP)`);
     err.status = 400;
     throw err;
   }

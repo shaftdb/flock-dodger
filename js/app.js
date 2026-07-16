@@ -1158,6 +1158,14 @@
       } else {
         showToast(`Route updated${shaped}${note}`, "success");
       }
+      // Optional soft support prompt (never blocks); see MONETIZATION.md
+      if (typeof window.__flockAfterRouteSuccess === "function") {
+        try {
+          window.__flockAfterRouteSuccess();
+        } catch {
+          /* ignore */
+        }
+      }
     } catch (err) {
       if (token !== state.planToken) return;
       console.error(err);

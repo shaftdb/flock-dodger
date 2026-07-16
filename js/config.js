@@ -1,78 +1,69 @@
 /**
  * Flock Dodger — public configuration
  *
- * Stripe: set publishableKey + either paymentLinks OR checkoutApiUrl (server).
+ * Monetization model (see MONETIZATION.md):
+ * - Free forever: routing, live OSM cameras, export, reports
+ * - Optional one-time Supporter (Stripe)
+ * - Optional tip (no unlocks required)
+ * - No ads / no tracking ad networks
+ *
+ * Stripe: set publishableKey + paymentLinks OR checkoutApiUrl.
  * Never put your secret key in the browser.
  */
 
 const AppConfig = {
-  // ── Stripe (test mode keys are fine for development) ─────────────────────
   stripe: {
-    /** pk_test_... or pk_live_... from Stripe Dashboard */
     publishableKey: "",
 
-    /**
-     * Optional backend that creates Checkout Sessions.
-     * POST { featureId } → { url } | { id, url }
-     * See server/create-checkout.mjs
-     */
+    /** POST { featureId } → { url } — see server/create-checkout.mjs */
     checkoutApiUrl: "/api/create-checkout-session",
 
     /**
-     * Fallback: Stripe Payment Links (Dashboard → Payment Links).
-     * Keys must match Premium.FEATURES ids (or "bundle").
+     * Stripe Payment Links (Dashboard → Payment Links, mode: payment).
+     * Success URL example:
+     *   https://yoursite/index.html?checkout=success&feature=supporter
      */
     paymentLinks: {
-      // offline: "https://buy.stripe.com/test_xxxxxxxx",
-      // live_intel: "https://buy.stripe.com/test_xxxxxxxx",
-      // turn_by_turn: "https://buy.stripe.com/test_xxxxxxxx",
-      // bundle: "https://buy.stripe.com/test_xxxxxxxx",
+      // supporter: "https://buy.stripe.com/test_xxxxxxxx",
+      // tip: "https://buy.stripe.com/test_xxxxxxxx",
     },
 
-    /**
-     * Price IDs for server-created Checkout Sessions (price_...).
-     * Used by create-checkout.mjs — mirrored here for docs only if needed client-side.
-     */
     priceIds: {
-      offline: "",
-      live_intel: "",
-      turn_by_turn: "",
-      bundle: "",
+      supporter: "",
+      tip: "",
     },
 
-    /**
-     * When true (default if no real Stripe config), Checkout opens a demo
-     * success flow so unlocks can be tested without API keys.
-     */
+    /** Demo checkout when Stripe is not configured (local testing) */
     allowDemoCheckout: true,
   },
 
-  // ── Rewarded ads (placeholder for AdMob / Unity Ads / etc.) ───────────────
-  ads: {
-    /** Simulated ad length in seconds */
-    rewardDurationSec: 12,
-    /** How long a rewarded unlock lasts (ms). 24h default. */
-    rewardTtlMs: 24 * 60 * 60 * 1000,
-    /** Max rewarded unlocks per feature per calendar day (client-side soft limit) */
-    maxRewardsPerDay: 3,
-    /**
-     * Placeholder network name shown in UI.
-     * Swap watchRewardedAd() in premium.js for a real SDK later.
-     */
-    networkLabel: "Rewarded Ad (placeholder)",
-  },
-
-  // Display prices (marketing copy; real charge is Stripe)
-  prices: {
-    offline: { amount: 4.99, label: "$4.99" },
-    live_intel: { amount: 3.99, label: "$3.99" },
-    turn_by_turn: { amount: 5.99, label: "$5.99" },
-    bundle: { amount: 9.99, label: "$9.99", note: "All premium features" },
-  },
-
   /**
-   * Cameras from OpenStreetMap (Overpass) + your local community reports only.
+   * Soft support prompts — never block core features.
+   * Shown only after value (e.g. successful route), rarely.
    */
+  support: {
+    /** Show soft “support the project” after successful routes */
+    softPromptEnabled: true,
+    /** Show at most once per N successful route plans (this device) */
+    softPromptEveryNRoutes: 8,
+    /** Don’t show again for this many days after dismiss */
+    softPromptCooldownSnoozeDays: 14,
+  },
+
+  // Display prices (marketing; real charge is Stripe)
+  prices: {
+    tip: {
+      amount: 3,
+      label: "$3",
+      note: "Optional tip — keeps the lights on",
+    },
+    supporter: {
+      amount: 14.99,
+      label: "$14.99",
+      note: "One-time · lifetime Supporter",
+    },
+  },
+
   cameras: {
     useLiveOsm: true,
     useCommunityReports: true,
