@@ -1,0 +1,1791 @@
+/**
+ * Flock Dodger — main application
+ */
+
+(function () {
+  "use strict";
+
+  // ---------- State ----------
+  const state = {
+    start: null,
+    end: null,
+    bufferMeters: 150,
+    cameras: [],
+    lastPlan: null,
+    map: null,
+    layers: {
+      cameras: null,
+      buffers: null,
+      standard: null,
+      avoid: null,
+      vias: null,
+      preview: null,
+      startMarker: null,
+      endMarker: null,
+    },
+    showCameras: true,
+    showStandard: true,
+    showAvoid: true,
+    showBuffers: false,
+    showCommunity: true,
+    reportPickMode: false,
+    /** Which planned geometry to hand off to external maps */
+    exportRoute: "avoid", // "avoid" | "standard"
+    /** User-dragged intermediate points on the avoid route */
+    userVias: [],
+    planToken: 0,
+    isPlanning: false,
+    isDragging: false,
+    suppressFit: false,
+  };
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+
+  const els = {
+    startInput: $("start-input"),
+    endInput: $("end-input"),
+    startSug: $("start-suggestions"),
+    endSug: $("end-suggestions"),
+    btnRoute: $("btn-route"),
+    btnSwap: $("btn-swap"),
+    btnLocate: $("btn-locate"),
+    btnSave: $("btn-save-route"),
+    btnFit: $("btn-fit"),
+    btnExportGoogle: $("btn-export-google"),
+    btnExportApple: $("btn-export-apple"),
+    btnExportWaze: $("btn-export-waze"),
+    exportRouteAvoid: $("export-route-avoid"),
+    exportRouteStandard: $("export-route-standard"),
+    exportHint: $("export-hint"),
+    btnSaved: $("btn-saved"),
+    btnMenu: $("btn-menu"),
+    btnInstall: $("btn-install"),
+    btnInstallBanner: $("btn-install-banner"),
+    btnDismissInstall: $("btn-dismiss-install"),
+    installBanner: $("install-banner"),
+    sidebar: $("sidebar"),
+    bufferSlider: $("buffer-slider"),
+    bufferValue: $("buffer-value"),
+    statsPanel: $("stats-panel"),
+    privacyScore: $("privacy-score"),
+    privacyLabel: $("privacy-label"),
+    scoreArc: $("score-arc"),
+    statAvoided: $("stat-avoided"),
+    statOnStandard: $("stat-on-standard"),
+    statRemaining: $("stat-remaining"),
+    statExtraDist: $("stat-extra-dist"),
+    statExtraTime: $("stat-extra-time"),
+    stdDistance: $("std-distance"),
+    stdDuration: $("std-duration"),
+    avoidDistance: $("avoid-distance"),
+    avoidDuration: $("avoid-duration"),
+    loading: $("loading"),
+    loadingText: $("loading-text"),
+    loadingSteps: $("loading-steps"),
+    mapProgress: $("map-progress"),
+    mapEmpty: $("map-empty"),
+    offlineChip: $("offline-chip"),
+    dragChip: $("drag-chip"),
+    routeError: $("route-error"),
+    routeErrorText: $("route-error-text"),
+    btnRouteRetry: $("btn-route-retry"),
+    btnRouteErrorDismiss: $("btn-route-error-dismiss"),
+    startWrap: $("start-wrap"),
+    endWrap: $("end-wrap"),
+    startError: $("start-error"),
+    endError: $("end-error"),
+    startSpinner: $("start-spinner"),
+    endSpinner: $("end-spinner"),
+    toast: $("toast"),
+    savedModal: $("saved-modal"),
+    savedList: $("saved-list"),
+    savedEmpty: $("saved-empty"),
+    toggleCameras: $("toggle-cameras"),
+    toggleStandard: $("toggle-standard"),
+    toggleAvoid: $("toggle-avoid"),
+    toggleBuffers: $("toggle-buffers"),
+    toggleCommunity: $("toggle-community"),
+    btnReport: $("btn-report"),
+    btnReportOpen: $("btn-report-open"),
+    reportModal: $("report-modal"),
+    reportForm: $("report-form"),
+    reportName: $("report-name"),
+    reportType: $("report-type"),
+    reportConfidence: $("report-confidence"),
+    reportDirection: $("report-direction"),
+    reportLat: $("report-lat"),
+    reportLng: $("report-lng"),
+    reportAddress: $("report-address"),
+    reportNotes: $("report-notes"),
+    reportFormError: $("report-form-error"),
+    reportCoordsHint: $("report-coords-hint"),
+    btnReportPick: $("btn-report-pick"),
+    btnReportGps: $("btn-report-gps"),
+    btnReportSubmit: $("btn-report-submit"),
+    reportPickChip: $("report-pick-chip"),
+    communityList: $("community-list"),
+    communityEmpty: $("community-empty"),
+    reportCount: $("report-count"),
+  };
+
+  // ---------- Map ----------
+  function initMap() {
+    state.map = L.map("map", {
+      zoomControl: false,
+      attributionControl: true,
+    }).setView([39.8283, -98.5795], 4);
+
+    L.control.zoom({ position: "bottomright" }).addTo(state.map);
+
+    // Dark tiles — CartoDB Dark Matter
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(state.map);
+
+    state.layers.cameras = L.layerGroup().addTo(state.map);
+    state.layers.buffers = L.layerGroup();
+    state.layers.standard = L.layerGroup().addTo(state.map);
+    state.layers.avoid = L.layerGroup().addTo(state.map);
+    state.layers.vias = L.layerGroup().addTo(state.map);
+    state.layers.preview = L.layerGroup().addTo(state.map);
+
+    // Initial sample cameras around continental US view — sparse until route planned
+    refreshCamerasForView();
+    state.map.on("moveend", debounce(refreshCamerasForView, 400));
+
+    // Long-press / right-click to drop start or end (disabled during report pick)
+    let pressTimer = null;
+    let pressLatLng = null;
+    state.map.on("contextmenu", (e) => {
+      L.DomEvent.preventDefault(e.originalEvent);
+      if (state.reportPickMode) {
+        applyReportPick(e.latlng);
+        return;
+      }
+      dropMapPin(e.latlng);
+    });
+    state.map.on("click", (e) => {
+      if (state.reportPickMode) {
+        applyReportPick(e.latlng);
+      }
+    });
+    state.map.on("mousedown", (e) => {
+      if (state.reportPickMode) return;
+      if (e.originalEvent.button !== 0) return;
+      pressLatLng = e.latlng;
+      pressTimer = setTimeout(() => {
+        if (pressLatLng) dropMapPin(pressLatLng);
+        pressLatLng = null;
+      }, 550);
+    });
+    const clearPress = () => {
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = null;
+      pressLatLng = null;
+    };
+    state.map.on("mouseup", clearPress);
+    state.map.on("mousemove", (e) => {
+      if (!pressTimer || !pressLatLng) return;
+      if (pressLatLng.distanceTo(e.latlng) > 12) clearPress();
+    });
+    state.map.on("dragstart", clearPress);
+  }
+
+  async function dropMapPin(latlng) {
+    const place = {
+      lat: latlng.lat,
+      lng: latlng.lng,
+      display_name: `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`,
+      type: "map-pin",
+    };
+    try {
+      setFieldLoading("start", !state.start);
+      setFieldLoading("end", Boolean(state.start) && !state.end);
+      const rev = await Geocoding.reverse(latlng.lat, latlng.lng);
+      place.display_name = rev.display_name;
+    } catch {
+      /* keep coords label */
+    } finally {
+      setFieldLoading("start", false);
+      setFieldLoading("end", false);
+    }
+
+    if (!state.start || (state.start && state.end)) {
+      // New pair starts at this pin if both already set, or first pin
+      if (state.start && state.end) {
+        state.start = place;
+        state.end = null;
+        state.userVias = [];
+        state.lastPlan = null;
+        els.startInput.value = place.display_name;
+        els.endInput.value = "";
+        clearFieldError("start");
+        clearFieldError("end");
+        setEndpoints(state.start, null);
+        clearRoutes();
+        updateMapEmpty();
+        showToast("Start set — drop or type a destination", "success");
+        return;
+      }
+      state.start = place;
+      els.startInput.value = place.display_name;
+      clearFieldError("start");
+      setEndpoints(state.start, state.end);
+      showToast("Start pin set", "success");
+    } else {
+      state.end = place;
+      els.endInput.value = place.display_name;
+      clearFieldError("end");
+      setEndpoints(state.start, state.end);
+      showToast("End pin set — calculating…", "success");
+      await runPlan({ preserveVias: false });
+    }
+    updateMapEmpty();
+  }
+
+  function boundsFromMap() {
+    const b = state.map.getBounds();
+    return {
+      minLat: b.getSouth(),
+      maxLat: b.getNorth(),
+      minLng: b.getWest(),
+      maxLng: b.getEast(),
+    };
+  }
+
+  /** Merge dataset cameras with local community reports */
+  function collectCameras(bounds) {
+    const base = CameraData.getCamerasInBounds(bounds);
+    if (!state.showCommunity) return base;
+    const community = Storage.reportsAsCameras(bounds);
+    // Community IDs win over procedural collisions
+    const seen = new Set(community.map((c) => c.id));
+    return [...community, ...base.filter((c) => !seen.has(c.id))];
+  }
+
+  function refreshCamerasForView() {
+    if (!state.map || state.lastPlan) return; // while a plan is active, cameras are set by plan
+    const cameras = collectCameras(boundsFromMap());
+    state.cameras = cameras;
+    renderCameraMarkers(cameras, new Set());
+  }
+
+  function cameraIcon(nearRoute, community) {
+    const cls = [
+      "camera-marker",
+      nearRoute ? "near-route" : "",
+      community ? "community" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return L.divIcon({
+      className: "",
+      html: `<div class="${cls}" title="${community ? "Community report" : "ALPR camera"}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  function endpointIcon(kind, label) {
+    return L.divIcon({
+      className: "endpoint-div-icon",
+      html: `<div class="endpoint-marker ${kind}" title="Drag to move">${label}</div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+  }
+
+  function viaIcon() {
+    return L.divIcon({
+      className: "via-div-icon",
+      html: `<div class="via-handle" title="Drag to reshape avoid route"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+  }
+
+  function sampleViasFromCoords(coords, count = 3) {
+    if (!coords || coords.length < 4) return [];
+    const out = [];
+    for (let i = 1; i <= count; i++) {
+      const t = i / (count + 1);
+      const idx = Math.min(coords.length - 2, Math.max(1, Math.round(t * (coords.length - 1))));
+      out.push({ lat: coords[idx][0], lng: coords[idx][1] });
+    }
+    return out;
+  }
+
+  function clearRoutes() {
+    state.layers.standard?.clearLayers();
+    state.layers.avoid?.clearLayers();
+    state.layers.vias?.clearLayers();
+    state.layers.preview?.clearLayers();
+  }
+
+  function updateMapEmpty() {
+    if (!els.mapEmpty) return;
+    const hasRoute = Boolean(state.lastPlan?.avoid?.coords?.length || state.lastPlan?.standard?.coords?.length);
+    els.mapEmpty.hidden = hasRoute || (state.start && state.end);
+    if (state.start && !state.end) {
+      const p = els.mapEmpty.querySelector("p.text-sm");
+      if (p) p.textContent = "Set a destination";
+    } else if (!hasRoute) {
+      const p = els.mapEmpty.querySelector("p.text-sm");
+      if (p) p.textContent = "Plan a private drive";
+    }
+  }
+
+  function setDragChip(on, text) {
+    if (!els.dragChip) return;
+    els.dragChip.hidden = !on;
+    if (text) els.dragChip.textContent = text;
+  }
+
+  function updatePreviewLine() {
+    state.layers.preview.clearLayers();
+    if (!state.start || !state.end) return;
+    const pts = [
+      [state.start.lat, state.start.lng],
+      ...((state._dragVias || state.userVias || []).map((v) => [v.lat, v.lng])),
+      [state.end.lat, state.end.lng],
+    ];
+    L.polyline(pts, {
+      color: "#3dd68c",
+      weight: 3,
+      opacity: 0.45,
+      dashArray: "6 8",
+      className: "route-line-preview",
+      interactive: false,
+    }).addTo(state.layers.preview);
+  }
+
+  function renderCameraMarkers(cameras, highlightIds) {
+    state.layers.cameras.clearLayers();
+    state.layers.buffers.clearLayers();
+
+    cameras.forEach((cam) => {
+      if (cam.community && !state.showCommunity) return;
+      const near = highlightIds.has(cam.id);
+      const marker = L.marker([cam.lat, cam.lng], {
+        icon: cameraIcon(near, cam.community || cam.source === "community"),
+        keyboard: true,
+        title: cam.name,
+      });
+      const region = cam.region ? ` · ${escapeHtml(cam.region)}` : "";
+      const conf = cam.confidence
+        ? `<br/><span style="color:#6b8578;font-size:11px">Confidence: ${escapeHtml(cam.confidence)}</span>`
+        : "";
+      const notes = cam.notes
+        ? `<br/><span style="color:#9fb5a8;font-size:11px">${escapeHtml(cam.notes)}</span>`
+        : "";
+      const del =
+        cam.community || cam.source === "community"
+          ? `<br/><button type="button" class="popup-del-report" data-report-id="${escapeHtml(cam.id)}" style="margin-top:6px;font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Remove report</button>`
+          : "";
+      marker.bindPopup(
+        `<strong>${escapeHtml(cam.name)}</strong><br/>
+         <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span><br/>
+         <span style="color:#6b8578;font-size:11px">Source: ${escapeHtml(cam.source)}</span>${conf}${notes}${del}`
+      );
+      marker.on("popupopen", () => {
+        const btn = document.querySelector(`.popup-del-report[data-report-id="${cam.id}"]`);
+        btn?.addEventListener("click", () => {
+          Storage.removeReport(cam.id);
+          marker.closePopup();
+          refreshCommunityUI();
+          refreshCamerasAfterReportChange();
+          showToast("Community report removed", "success");
+        });
+      });
+      state.layers.cameras.addLayer(marker);
+
+      if (state.showBuffers) {
+        const isCommunity = cam.community || cam.source === "community";
+        const color = near ? "#f5a623" : isCommunity ? "#a78bfa" : "#ef4444";
+        const circle = L.circle([cam.lat, cam.lng], {
+          radius: state.bufferMeters,
+          color,
+          weight: 1,
+          opacity: 0.45,
+          fillColor: color,
+          fillOpacity: 0.06,
+          interactive: false,
+        });
+        state.layers.buffers.addLayer(circle);
+      }
+    });
+  }
+
+  function refreshCamerasAfterReportChange() {
+    if (state.lastPlan && state.start && state.end) {
+      // Re-score routes with new community points
+      runPlan({ preserveVias: true, quiet: true });
+      return;
+    }
+    if (state.map) {
+      const cameras = collectCameras(boundsFromMap());
+      state.cameras = cameras;
+      renderCameraMarkers(cameras, new Set());
+    }
+  }
+
+  function refreshCommunityUI() {
+    const reports = Storage.loadReports();
+    if (els.reportCount) els.reportCount.textContent = String(reports.length);
+    if (!els.communityList) return;
+    els.communityList.innerHTML = "";
+    els.communityEmpty?.classList.toggle("hidden", reports.length > 0);
+
+    reports.slice(0, 40).forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "report-item";
+      row.innerHTML = `
+        <div class="min-w-0 flex-1" data-focus-report="${escapeHtml(r.id)}">
+          <p class="text-xs font-medium truncate">${escapeHtml(r.name)}</p>
+          <p class="text-[10px] text-flock-muted font-mono mt-0.5">
+            ${escapeHtml(r.type)} · ${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}
+          </p>
+        </div>
+        <button type="button" class="btn-icon h-7 w-7 shrink-0" data-delete-report="${escapeHtml(r.id)}" title="Delete" aria-label="Delete report">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6"/></svg>
+        </button>`;
+      row.querySelector(`[data-focus-report="${r.id}"]`)?.addEventListener("click", () => {
+        state.map?.setView([r.lat, r.lng], 16);
+        showToast("Centered on report", "success");
+      });
+      row.querySelector(`[data-delete-report="${r.id}"]`)?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        Storage.removeReport(r.id);
+        refreshCommunityUI();
+        refreshCamerasAfterReportChange();
+        showToast("Report deleted", "success");
+      });
+      els.communityList.appendChild(row);
+    });
+  }
+
+  function bindEndpointDrag(marker, kind) {
+    marker.on("dragstart", () => {
+      state.isDragging = true;
+      setDragChip(true, kind === "start" ? "Dragging start…" : "Dragging end…");
+      const el = marker.getElement()?.querySelector(".endpoint-marker");
+      el?.classList.add("is-dragging");
+      state.map.dragging.disable();
+    });
+    marker.on("drag", () => {
+      const ll = marker.getLatLng();
+      if (kind === "start" && state.start) {
+        state.start = { ...state.start, lat: ll.lat, lng: ll.lng };
+      } else if (kind === "end" && state.end) {
+        state.end = { ...state.end, lat: ll.lat, lng: ll.lng };
+      }
+      updatePreviewLine();
+    });
+    marker.on("dragend", async () => {
+      state.map.dragging.enable();
+      const el = marker.getElement()?.querySelector(".endpoint-marker");
+      el?.classList.remove("is-dragging");
+      state.isDragging = false;
+      setDragChip(false);
+      state.layers.preview.clearLayers();
+
+      const ll = marker.getLatLng();
+      const place = {
+        lat: ll.lat,
+        lng: ll.lng,
+        display_name: `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`,
+        type: "dragged",
+      };
+      try {
+        setFieldLoading(kind, true);
+        const rev = await Geocoding.reverse(ll.lat, ll.lng);
+        place.display_name = rev.display_name;
+      } catch {
+        /* keep coord label */
+      } finally {
+        setFieldLoading(kind, false);
+      }
+
+      if (kind === "start") {
+        state.start = place;
+        els.startInput.value = place.display_name;
+        clearFieldError("start");
+      } else {
+        state.end = place;
+        els.endInput.value = place.display_name;
+        clearFieldError("end");
+      }
+      // Endpoint move invalidates previous via shaping relative to old path
+      state.userVias = [];
+      marker.setPopupContent(
+        `<strong>${kind === "start" ? "Start" : "End"}</strong><br/>${escapeHtml(place.display_name)}`
+      );
+      if (state.start && state.end) {
+        state.suppressFit = true;
+        await runPlan({ preserveVias: false, quiet: true });
+        state.suppressFit = false;
+      } else {
+        setEndpoints(state.start, state.end);
+      }
+    });
+  }
+
+  function setEndpoints(start, end) {
+    if (state.layers.startMarker) {
+      state.map.removeLayer(state.layers.startMarker);
+      state.layers.startMarker = null;
+    }
+    if (state.layers.endMarker) {
+      state.map.removeLayer(state.layers.endMarker);
+      state.layers.endMarker = null;
+    }
+    if (start) {
+      state.layers.startMarker = L.marker([start.lat, start.lng], {
+        icon: endpointIcon("start", "A"),
+        zIndexOffset: 600,
+        draggable: true,
+        autoPan: true,
+        title: "Drag to move start",
+      })
+        .bindPopup(`<strong>Start</strong><br/>${escapeHtml(start.display_name || "")}<br/><span style="color:#6b8578;font-size:11px">Drag to move</span>`)
+        .addTo(state.map);
+      bindEndpointDrag(state.layers.startMarker, "start");
+    }
+    if (end) {
+      state.layers.endMarker = L.marker([end.lat, end.lng], {
+        icon: endpointIcon("end", "B"),
+        zIndexOffset: 600,
+        draggable: true,
+        autoPan: true,
+        title: "Drag to move end",
+      })
+        .bindPopup(`<strong>End</strong><br/>${escapeHtml(end.display_name || "")}<br/><span style="color:#6b8578;font-size:11px">Drag to move</span>`)
+        .addTo(state.map);
+      bindEndpointDrag(state.layers.endMarker, "end");
+    }
+  }
+
+  function renderViaHandles(plan) {
+    state.layers.vias.clearLayers();
+    if (!plan?.avoid?.coords?.length) return;
+
+    const vias =
+      state.userVias?.length > 0
+        ? state.userVias
+        : sampleViasFromCoords(plan.avoid.coords, 3);
+
+    vias.forEach((v, index) => {
+      const marker = L.marker([v.lat, v.lng], {
+        icon: viaIcon(),
+        draggable: true,
+        zIndexOffset: 450,
+        autoPan: true,
+        title: "Drag to reshape route",
+      });
+
+      marker.on("dragstart", () => {
+        state.isDragging = true;
+        setDragChip(true, "Reshaping avoid route…");
+        marker.getElement()?.querySelector(".via-handle")?.classList.add("is-dragging");
+        // Seed user vias from current handle positions
+        if (!state.userVias?.length) {
+          state.userVias = vias.map((p) => ({ lat: p.lat, lng: p.lng }));
+        }
+        state._dragVias = state.userVias.map((p) => ({ ...p }));
+        state.map.dragging.disable();
+      });
+
+      marker.on("drag", () => {
+        const ll = marker.getLatLng();
+        if (!state._dragVias) state._dragVias = state.userVias.map((p) => ({ ...p }));
+        state._dragVias[index] = { lat: ll.lat, lng: ll.lng };
+        updatePreviewLine();
+      });
+
+      marker.on("dragend", async () => {
+        state.map.dragging.enable();
+        marker.getElement()?.querySelector(".via-handle")?.classList.remove("is-dragging");
+        state.isDragging = false;
+        setDragChip(false);
+        state.layers.preview.clearLayers();
+        const ll = marker.getLatLng();
+        if (!state.userVias?.length) {
+          state.userVias = vias.map((p) => ({ lat: p.lat, lng: p.lng }));
+        }
+        state.userVias[index] = { lat: ll.lat, lng: ll.lng };
+        state._dragVias = null;
+        state.suppressFit = true;
+        await runPlan({ preserveVias: true, quiet: true });
+        state.suppressFit = false;
+      });
+
+      // Double-click handle to remove that via
+      marker.on("dblclick", async (e) => {
+        L.DomEvent.stop(e);
+        if (!state.userVias?.length) {
+          state.userVias = vias.map((p) => ({ lat: p.lat, lng: p.lng }));
+        }
+        state.userVias.splice(index, 1);
+        state.suppressFit = true;
+        await runPlan({ preserveVias: true, quiet: true });
+        state.suppressFit = false;
+        showToast("Via removed", "success");
+      });
+
+      state.layers.vias.addLayer(marker);
+    });
+  }
+
+  function drawRoutes(plan) {
+    state.layers.standard.clearLayers();
+    state.layers.avoid.clearLayers();
+    state.layers.preview.clearLayers();
+
+    if (plan.standard?.coords?.length) {
+      const line = L.polyline(plan.standard.coords, {
+        color: "#38bdf8",
+        weight: 5,
+        opacity: 0.75,
+        lineJoin: "round",
+        dashArray: "10 8",
+        interactive: false,
+      });
+      state.layers.standard.addLayer(line);
+    }
+
+    if (plan.avoid?.coords?.length) {
+      const line = L.polyline(plan.avoid.coords, {
+        color: "#3dd68c",
+        weight: 6,
+        opacity: 0.95,
+        lineJoin: "round",
+        interactive: true,
+      });
+      // Click on avoid route to add a via at nearest point
+      line.on("click", async (e) => {
+        L.DomEvent.stopPropagation(e);
+        const ll = e.latlng;
+        if (!state.userVias?.length) {
+          state.userVias = sampleViasFromCoords(plan.avoid.coords, 2);
+        }
+        if (state.userVias.length >= 8) {
+          showToast("Maximum of 8 vias — drag or double-click to remove", "error");
+          return;
+        }
+        state.userVias.push({ lat: ll.lat, lng: ll.lng });
+        state.suppressFit = true;
+        await runPlan({ preserveVias: true, quiet: true });
+        state.suppressFit = false;
+        showToast("Via added — drag handles to refine", "success");
+      });
+      state.layers.avoid.addLayer(line);
+    }
+
+    renderViaHandles(plan);
+  }
+
+  function fitToPlan(plan) {
+    const all = [];
+    if (plan.standard?.coords) all.push(...plan.standard.coords);
+    if (plan.avoid?.coords) all.push(...plan.avoid.coords);
+    if (all.length) {
+      state.map.fitBounds(all, { padding: [40, 40], maxZoom: 14 });
+    }
+  }
+
+  // ---------- Stats UI ----------
+  function updateStats(plan) {
+    els.statsPanel.classList.remove("hidden");
+    els.statsPanel.classList.add("stats-panel-enter");
+    els.statsPanel.classList.remove("is-soft-loading");
+
+    const score = plan.privacyScore;
+    els.privacyScore.textContent = String(score);
+    els.privacyLabel.textContent = Routing.privacyLabel(score);
+
+    // Arc: circumference ≈ 2 * π * 34 ≈ 213.63
+    const C = 2 * Math.PI * 34;
+    const offset = C - (score / 100) * C;
+    els.scoreArc.style.strokeDasharray = String(C);
+    els.scoreArc.style.strokeDashoffset = String(offset);
+
+    // Color by score
+    let color = "#3dd68c";
+    if (score < 30) color = "#ef4444";
+    else if (score < 50) color = "#f5a623";
+    else if (score < 70) color = "#eab308";
+    els.scoreArc.style.color = color;
+    els.privacyScore.style.color = color;
+
+    els.statAvoided.textContent = String(plan.avoidedCount);
+    els.statOnStandard.textContent = String(plan.camsOnStandard.length);
+    els.statRemaining.textContent = String(plan.camsOnAvoid.length);
+    els.statExtraDist.textContent =
+      plan.extraDist > 50 ? `+${Routing.formatDistance(plan.extraDist)}` : "~0";
+    els.statExtraTime.textContent =
+      plan.extraTime > 30 ? `+${Routing.formatDuration(plan.extraTime)}` : "~0";
+
+    els.stdDistance.textContent = Routing.formatDistance(plan.standard.distance);
+    els.stdDuration.textContent = Routing.formatDuration(plan.standard.duration);
+    els.avoidDistance.textContent = Routing.formatDistance(plan.avoid.distance);
+    els.avoidDuration.textContent = Routing.formatDuration(plan.avoid.duration);
+  }
+
+  // ---------- Planning ----------
+  /**
+   * @param {{ preserveVias?: boolean, quiet?: boolean }} [opts]
+   */
+  async function runPlan(opts = {}) {
+    clearRouteError();
+    clearFieldError("start");
+    clearFieldError("end");
+
+    if (!opts.preserveVias) {
+      // Fresh plan from addresses resets manual shaping unless caller keeps vias
+      // (drag-via calls pass preserveVias: true)
+    }
+
+    if (!state.start || !state.end) {
+      try {
+        setLoadingStep("geo");
+        setLoading(true, "Looking up addresses…");
+        await resolveInputsIfNeeded();
+      } catch (err) {
+        setLoading(false);
+        const msg = friendlyError(err, "Enter valid start and end addresses");
+        if (/start/i.test(msg)) setFieldError("start", msg);
+        else if (/destin|end/i.test(msg)) setFieldError("end", msg);
+        showRouteError(msg);
+        showToast(msg, "error");
+        return;
+      }
+    }
+
+    if (!state.start || !state.end) {
+      if (!state.start) setFieldError("start", "Enter a start address");
+      if (!state.end) setFieldError("end", "Enter a destination");
+      const msg = "Enter start and destination addresses";
+      showRouteError(msg);
+      showToast(msg, "error");
+      return;
+    }
+
+    if (
+      state.start.lat === state.end.lat &&
+      state.start.lng === state.end.lng
+    ) {
+      const msg = "Start and end are the same point";
+      showRouteError(msg);
+      showToast(msg, "error");
+      return;
+    }
+
+    const token = ++state.planToken;
+    state.isPlanning = true;
+    setRouteButtonLoading(true);
+    setLoadingStep("route");
+    setLoading(true, opts.quiet ? "Updating route…" : "Calculating privacy routes…");
+    els.statsPanel?.classList.add("is-soft-loading");
+
+    try {
+      const bounds = {
+        minLat: Math.min(state.start.lat, state.end.lat),
+        maxLat: Math.max(state.start.lat, state.end.lat),
+        minLng: Math.min(state.start.lng, state.end.lng),
+        maxLng: Math.max(state.start.lng, state.end.lng),
+      };
+      const padLat = Math.max(0.05, (bounds.maxLat - bounds.minLat) * 0.35);
+      const padLng = Math.max(0.05, (bounds.maxLng - bounds.minLng) * 0.35);
+      bounds.minLat -= padLat;
+      bounds.maxLat += padLat;
+      bounds.minLng -= padLng;
+      bounds.maxLng += padLng;
+
+      const cameras = collectCameras(bounds);
+      state.cameras = cameras;
+
+      setLoadingStep("score");
+      setLoading(true, "Scoring camera exposure…");
+
+      if (opts.preserveVias === false) {
+        state.userVias = [];
+      }
+      const userWaypoints = state.userVias?.length ? state.userVias : undefined;
+
+      const plan = await Routing.planRoutes(
+        state.start,
+        state.end,
+        state.bufferMeters,
+        cameras,
+        { userWaypoints }
+      );
+
+      // Ignore stale plans if a newer run started
+      if (token !== state.planToken) return;
+
+      state.lastPlan = plan;
+
+      setEndpoints(state.start, state.end);
+      drawRoutes(plan);
+
+      const highlight = new Set([
+        ...plan.camsOnStandard.map((c) => c.id),
+        ...plan.camsOnAvoid.map((c) => c.id),
+      ]);
+      renderCameraMarkers(cameras, highlight);
+      updateStats(plan);
+      updateMapEmpty();
+
+      if (!state.suppressFit) {
+        fitToPlan(plan);
+      }
+
+      const note =
+        plan.standard.source === "fallback" || plan.avoid.source === "fallback"
+          ? " · approximate geometry"
+          : "";
+      const shaped = plan.avoid?.userShaped ? " · custom shape" : "";
+      if (!opts.quiet) {
+        showToast(
+          `Routes ready — avoided ${plan.avoidedCount} camera${plan.avoidedCount === 1 ? "" : "s"}${shaped}${note}`,
+          "success"
+        );
+      } else {
+        showToast(`Route updated${shaped}${note}`, "success");
+      }
+    } catch (err) {
+      if (token !== state.planToken) return;
+      console.error(err);
+      const msg = friendlyError(err, "Failed to calculate routes");
+      showRouteError(msg, true);
+      showToast(msg, "error");
+    } finally {
+      if (token === state.planToken) {
+        state.isPlanning = false;
+        setLoading(false);
+        setRouteButtonLoading(false);
+        els.statsPanel?.classList.remove("is-soft-loading");
+      }
+    }
+  }
+
+  async function resolveInputsIfNeeded() {
+    if (!state.start && els.startInput.value.trim().length >= 3) {
+      setFieldLoading("start", true);
+      try {
+        const results = await Geocoding.search(els.startInput.value.trim(), { limit: 1 });
+        if (!results.length) throw new Error("Could not find start address");
+        state.start = results[0];
+        els.startInput.value = results[0].display_name;
+      } finally {
+        setFieldLoading("start", false);
+      }
+    }
+    if (!state.end && els.endInput.value.trim().length >= 3) {
+      setFieldLoading("end", true);
+      try {
+        const results = await Geocoding.search(els.endInput.value.trim(), { limit: 1 });
+        if (!results.length) throw new Error("Could not find destination");
+        state.end = results[0];
+        els.endInput.value = results[0].display_name;
+      } finally {
+        setFieldLoading("end", false);
+      }
+    }
+  }
+
+  async function replanIfReady() {
+    if (state.start && state.end && state.lastPlan) {
+      await runPlan({ preserveVias: true, quiet: true });
+    } else if (state.lastPlan) {
+      const highlight = new Set([
+        ...(state.lastPlan.camsOnStandard || []).map((c) => c.id),
+        ...(state.lastPlan.camsOnAvoid || []).map((c) => c.id),
+      ]);
+      renderCameraMarkers(state.cameras, highlight);
+    }
+  }
+
+  // ---------- Autocomplete ----------
+  function setupAutocomplete(input, listEl, onPick, fieldKey) {
+    const ac = Geocoding.createAutocomplete((results, meta) => {
+      setFieldLoading(fieldKey, false);
+      if (meta?.error) {
+        renderSuggestions(listEl, [], null, {
+          error: "Search failed — check your connection and try again",
+        });
+        return;
+      }
+      renderSuggestions(
+        listEl,
+        results,
+        (item) => {
+          input.value = item.display_name;
+          hideSuggestions(listEl);
+          clearFieldError(fieldKey);
+          onPick(item);
+        },
+        {
+          empty:
+            input.value.trim().length >= 3
+              ? "No places found — try a more specific address"
+              : null,
+        }
+      );
+    });
+
+    // Wrap to show spinner while querying
+    const origQuery = ac.query.bind(ac);
+    ac.query = (text) => {
+      if ((text || "").trim().length >= 3) setFieldLoading(fieldKey, true);
+      else setFieldLoading(fieldKey, false);
+      origQuery(text);
+    };
+
+    input.addEventListener("input", () => {
+      onPick(null); // clear resolved place until re-picked
+      clearFieldError(fieldKey);
+      ac.query(input.value);
+    });
+
+    input.addEventListener("focus", () => {
+      if (input.value.trim().length >= 3) ac.query(input.value);
+    });
+
+    input.addEventListener("blur", () => {
+      // Keep spinner off if user leaves without results event
+      setTimeout(() => setFieldLoading(fieldKey, false), 400);
+    });
+
+    input.addEventListener("keydown", (e) => {
+      const items = [...listEl.querySelectorAll("li")];
+      const selected = listEl.querySelector('li[aria-selected="true"]');
+      let idx = items.indexOf(selected);
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        idx = Math.min(items.length - 1, idx + 1);
+        items.forEach((li, i) => li.setAttribute("aria-selected", i === idx ? "true" : "false"));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        idx = Math.max(0, idx - 1);
+        items.forEach((li, i) => li.setAttribute("aria-selected", i === idx ? "true" : "false"));
+      } else if (e.key === "Enter") {
+        if (selected) {
+          e.preventDefault();
+          selected.click();
+        }
+      } else if (e.key === "Escape") {
+        hideSuggestions(listEl);
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!listEl.contains(e.target) && e.target !== input) hideSuggestions(listEl);
+    });
+  }
+
+  function renderSuggestions(listEl, results, onSelect, meta = {}) {
+    listEl.innerHTML = "";
+    if (meta.error) {
+      const li = document.createElement("li");
+      li.className = "sug-error";
+      li.textContent = meta.error;
+      listEl.appendChild(li);
+      listEl.hidden = false;
+      return;
+    }
+    if (!results.length) {
+      if (meta.empty) {
+        const li = document.createElement("li");
+        li.className = "sug-empty";
+        li.textContent = meta.empty;
+        listEl.appendChild(li);
+        listEl.hidden = false;
+        return;
+      }
+      hideSuggestions(listEl);
+      return;
+    }
+    results.forEach((item, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", i === 0 ? "true" : "false");
+      li.innerHTML = `<span class="sug-type">${escapeHtml(item.type)}</span>${escapeHtml(item.display_name)}`;
+      li.addEventListener("click", () => onSelect(item));
+      listEl.appendChild(li);
+    });
+    listEl.hidden = false;
+  }
+
+  function hideSuggestions(listEl) {
+    listEl.hidden = true;
+    listEl.innerHTML = "";
+  }
+
+  // ---------- Saved routes ----------
+  function openSavedModal() {
+    renderSavedList();
+    els.savedModal.hidden = false;
+  }
+
+  function closeSavedModal() {
+    els.savedModal.hidden = true;
+  }
+
+  function renderSavedList() {
+    const routes = Storage.loadRoutes();
+    els.savedList.innerHTML = "";
+    els.savedEmpty.classList.toggle("hidden", routes.length > 0);
+
+    routes.forEach((r) => {
+      const btn = document.createElement("div");
+      btn.className = "saved-item";
+      btn.innerHTML = `
+        <div class="min-w-0 flex-1" data-load="${r.id}">
+          <p class="text-sm font-medium truncate">${escapeHtml(r.name)}</p>
+          <p class="text-[11px] text-flock-muted mt-0.5 font-mono">
+            Buffer ${r.bufferMeters}m
+            ${r.stats?.privacyScore != null ? ` · Score ${r.stats.privacyScore}` : ""}
+            · ${formatDate(r.createdAt)}
+          </p>
+        </div>
+        <div class="saved-actions">
+          <button type="button" class="btn-icon h-8 w-8" data-delete="${r.id}" title="Delete" aria-label="Delete route">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6"/></svg>
+          </button>
+        </div>
+      `;
+      btn.querySelector(`[data-load="${r.id}"]`).addEventListener("click", () => loadSavedRoute(r));
+      btn.querySelector(`[data-delete="${r.id}"]`).addEventListener("click", (e) => {
+        e.stopPropagation();
+        Storage.removeRoute(r.id);
+        renderSavedList();
+        showToast("Route deleted", "success");
+      });
+      els.savedList.appendChild(btn);
+    });
+  }
+
+  async function loadSavedRoute(r) {
+    closeSavedModal();
+    state.start = r.start;
+    state.end = r.end;
+    state.userVias = [];
+    state.bufferMeters = r.bufferMeters || 150;
+    els.startInput.value = r.start?.display_name || "";
+    els.endInput.value = r.end?.display_name || "";
+    els.bufferSlider.value = String(state.bufferMeters);
+    els.bufferValue.textContent = `${state.bufferMeters} m`;
+    els.bufferSlider.setAttribute("aria-valuenow", String(state.bufferMeters));
+    clearFieldError("start");
+    clearFieldError("end");
+    await runPlan({ preserveVias: false });
+  }
+
+  function saveCurrentRoute() {
+    if (!state.start || !state.end || !state.lastPlan) {
+      showToast("Plan a route before saving", "error");
+      return;
+    }
+    Storage.addRoute({
+      start: state.start,
+      end: state.end,
+      bufferMeters: state.bufferMeters,
+      stats: {
+        privacyScore: state.lastPlan.privacyScore,
+        avoidedCount: state.lastPlan.avoidedCount,
+        onStandard: state.lastPlan.camsOnStandard.length,
+        onAvoid: state.lastPlan.camsOnAvoid.length,
+        extraDist: state.lastPlan.extraDist,
+        extraTime: state.lastPlan.extraTime,
+      },
+    });
+    showToast("Route saved on this device", "success");
+  }
+
+  // ---------- Utils / loading / errors ----------
+  function setLoading(on, text) {
+    els.loading.classList.toggle("hidden", !on);
+    if (els.mapProgress) els.mapProgress.hidden = !on;
+    if (text && els.loadingText) els.loadingText.textContent = text;
+    document.body.classList.toggle("app-loading", on);
+  }
+
+  function setLoadingStep(step) {
+    if (!els.loadingSteps) return;
+    const order = ["geo", "route", "score"];
+    const idx = order.indexOf(step);
+    els.loadingSteps.querySelectorAll("[data-step]").forEach((el) => {
+      const s = el.getAttribute("data-step");
+      const si = order.indexOf(s);
+      el.classList.toggle("active", s === step);
+      el.classList.toggle("done", si >= 0 && si < idx);
+    });
+  }
+
+  function setRouteButtonLoading(on) {
+    els.btnRoute.disabled = on;
+    els.btnRoute.classList.toggle("is-loading", on);
+    els.btnRoute.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
+  function setFieldLoading(field, on) {
+    const wrap = field === "start" ? els.startWrap : field === "end" ? els.endWrap : null;
+    const spin = field === "start" ? els.startSpinner : field === "end" ? els.endSpinner : null;
+    wrap?.classList.toggle("is-loading", on);
+    if (spin) spin.hidden = !on;
+  }
+
+  function setFieldError(field, message) {
+    const wrap = field === "start" ? els.startWrap : els.endWrap;
+    const err = field === "start" ? els.startError : els.endError;
+    wrap?.classList.add("has-error");
+    if (err) {
+      err.hidden = !message;
+      err.textContent = message || "";
+    }
+  }
+
+  function clearFieldError(field) {
+    const wrap = field === "start" ? els.startWrap : els.endWrap;
+    const err = field === "start" ? els.startError : els.endError;
+    wrap?.classList.remove("has-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+  }
+
+  function showRouteError(message, canRetry = true) {
+    if (!els.routeError) return;
+    els.routeError.hidden = false;
+    if (els.routeErrorText) els.routeErrorText.textContent = message;
+    if (els.btnRouteRetry) els.btnRouteRetry.hidden = !canRetry;
+  }
+
+  function clearRouteError() {
+    if (els.routeError) els.routeError.hidden = true;
+  }
+
+  function friendlyError(err, fallback) {
+    if (!navigator.onLine) {
+      return "You’re offline. Check your connection and try again.";
+    }
+    const msg = (err && err.message) || String(err || "");
+    if (/Failed to fetch|NetworkError|Load failed|network/i.test(msg)) {
+      return "Network error — geocoding or routing service unreachable.";
+    }
+    if (/429|rate/i.test(msg)) {
+      return "Too many requests — wait a moment and retry.";
+    }
+    if (/No route|route found/i.test(msg)) {
+      return "No driving route found between these points.";
+    }
+    return msg || fallback || "Something went wrong";
+  }
+
+  function updateOnlineStatus() {
+    if (!els.offlineChip) return;
+    els.offlineChip.hidden = navigator.onLine;
+  }
+
+  let toastTimer = null;
+  function showToast(msg, type = "") {
+    if (!els.toast) return;
+    els.toast.hidden = false;
+    els.toast.className = `toast${type ? " " + type : ""}`;
+    els.toast.innerHTML = `<span class="toast-msg"></span><button type="button" class="toast-close" aria-label="Dismiss">×</button>`;
+    els.toast.querySelector(".toast-msg").textContent = msg;
+    els.toast.querySelector(".toast-close").onclick = () => {
+      els.toast.hidden = true;
+    };
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      els.toast.hidden = true;
+    }, type === "error" ? 5200 : 3400);
+  }
+  // Expose for premium-ui.js
+  window.__flockToast = showToast;
+
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function formatDate(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch {
+      return "";
+    }
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  // ---------- Events ----------
+  function bindEvents() {
+    setupAutocomplete(
+      els.startInput,
+      els.startSug,
+      (item) => {
+        state.start = item;
+        if (item) {
+          state.userVias = [];
+          setEndpoints(state.start, state.end);
+          updateMapEmpty();
+        }
+      },
+      "start"
+    );
+    setupAutocomplete(
+      els.endInput,
+      els.endSug,
+      (item) => {
+        state.end = item;
+        if (item) {
+          state.userVias = [];
+          setEndpoints(state.start, state.end);
+          updateMapEmpty();
+        }
+      },
+      "end"
+    );
+
+    els.btnRoute.addEventListener("click", () => runPlan({ preserveVias: false }));
+    els.btnRouteRetry?.addEventListener("click", () => runPlan({ preserveVias: true }));
+    els.btnRouteErrorDismiss?.addEventListener("click", clearRouteError);
+
+    async function loadDemo(start, end) {
+      state.start = start;
+      state.end = end;
+      state.userVias = [];
+      clearFieldError("start");
+      clearFieldError("end");
+      clearRouteError();
+      els.startInput.value = start.display_name;
+      els.endInput.value = end.display_name;
+      await runPlan({ preserveVias: false });
+    }
+
+    const btnDemo = $("btn-demo");
+    if (btnDemo) {
+      btnDemo.addEventListener("click", () =>
+        loadDemo(
+          {
+            lat: 30.2635,
+            lng: -97.7395,
+            display_name: "Austin Convention Center, Austin, Texas",
+            type: "demo",
+          },
+          {
+            lat: 30.2639,
+            lng: -97.7713,
+            display_name: "Barton Springs Pool, Austin, Texas",
+            type: "demo",
+          }
+        )
+      );
+    }
+
+    // Parkersburg WV → Athens OH — dense mock camera corridor
+    const btnDemoWv = $("btn-demo-wv");
+    if (btnDemoWv) {
+      btnDemoWv.addEventListener("click", () =>
+        loadDemo(
+          {
+            lat: 39.2667,
+            lng: -81.5615,
+            display_name: "Downtown Parkersburg, West Virginia",
+            type: "demo",
+          },
+          {
+            lat: 39.3292,
+            lng: -82.1013,
+            display_name: "Downtown Athens, Ohio",
+            type: "demo",
+          }
+        )
+      );
+    }
+
+    els.btnSwap.addEventListener("click", () => {
+      const tmp = state.start;
+      state.start = state.end;
+      state.end = tmp;
+      const tv = els.startInput.value;
+      els.startInput.value = els.endInput.value;
+      els.endInput.value = tv;
+      state.userVias = [];
+      clearFieldError("start");
+      clearFieldError("end");
+      setEndpoints(state.start, state.end);
+      if (state.start && state.end) runPlan({ preserveVias: false });
+    });
+
+    els.btnLocate.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showToast("Geolocation not supported on this device", "error");
+        return;
+      }
+      els.btnLocate.classList.add("is-loading");
+      setLoading(true, "Getting your location…");
+      setLoadingStep("geo");
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            const place = await Geocoding.reverse(lat, lng);
+            state.start = place;
+            state.userVias = [];
+            els.startInput.value = place.display_name;
+            clearFieldError("start");
+            state.map.setView([lat, lng], 13);
+            setEndpoints(state.start, state.end);
+            updateMapEmpty();
+            showToast("Start set to your location", "success");
+            if (state.end) await runPlan({ preserveVias: false, quiet: true });
+          } catch (err) {
+            state.start = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              display_name: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
+            };
+            els.startInput.value = state.start.display_name;
+            state.map.setView([state.start.lat, state.start.lng], 13);
+            setEndpoints(state.start, state.end);
+            updateMapEmpty();
+            showToast("Start set (address lookup limited)", "success");
+          } finally {
+            setLoading(false);
+            els.btnLocate.classList.remove("is-loading");
+          }
+        },
+        (err) => {
+          setLoading(false);
+          els.btnLocate.classList.remove("is-loading");
+          let msg = "Location permission denied";
+          if (err.code === 1) msg = "Location permission denied — enable it in browser settings";
+          else if (err.code === 2) msg = "Location unavailable";
+          else if (err.code === 3) msg = "Location request timed out";
+          showToast(msg, "error");
+          showRouteError(msg, false);
+        },
+        { enableHighAccuracy: true, timeout: 12000 }
+      );
+    });
+
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    updateOnlineStatus();
+
+    // Buffer slider — live label; replan on change end
+    els.bufferSlider.addEventListener("input", () => {
+      state.bufferMeters = Number(els.bufferSlider.value);
+      els.bufferValue.textContent = `${state.bufferMeters} m`;
+      els.bufferSlider.setAttribute("aria-valuenow", String(state.bufferMeters));
+      if (state.showBuffers && state.cameras.length) {
+        const highlight = new Set([
+          ...(state.lastPlan?.camsOnStandard || []).map((c) => c.id),
+          ...(state.lastPlan?.camsOnAvoid || []).map((c) => c.id),
+        ]);
+        renderCameraMarkers(state.cameras, highlight);
+      }
+    });
+    els.bufferSlider.addEventListener("change", () => {
+      Storage.saveSettings({ bufferMeters: state.bufferMeters });
+      replanIfReady();
+    });
+
+    els.btnSave.addEventListener("click", saveCurrentRoute);
+    els.btnFit.addEventListener("click", () => {
+      if (state.lastPlan) fitToPlan(state.lastPlan);
+    });
+
+    function setExportRoute(kind) {
+      state.exportRoute = kind === "standard" ? "standard" : "avoid";
+      els.exportRouteAvoid?.classList.toggle("export-route-tab--active", state.exportRoute === "avoid");
+      els.exportRouteStandard?.classList.toggle(
+        "export-route-tab--active",
+        state.exportRoute === "standard"
+      );
+      updateExportHint();
+    }
+
+    function updateExportHint() {
+      if (!els.exportHint) return;
+      if (state.exportRoute === "standard") {
+        els.exportHint.textContent =
+          "Sends the standard route. Google/Apple get start, end, and sampled waypoints; Waze opens the destination.";
+      } else {
+        els.exportHint.textContent =
+          "Sends the camera-avoiding route via waypoints. Apps may re-route slightly; Waze uses destination only.";
+      }
+    }
+
+    function exportRouteTo(provider) {
+      if (!state.start || !state.end) {
+        showToast("Plan a route first", "error");
+        return;
+      }
+      if (!state.lastPlan) {
+        showToast("Calculate a route before exporting", "error");
+        return;
+      }
+      const plan = state.lastPlan;
+      const useAvoid = state.exportRoute === "avoid";
+      const coords = useAvoid ? plan.avoid?.coords : plan.standard?.coords;
+      try {
+        const links = ExportMaps.exportTo(provider, {
+          start: state.start,
+          end: state.end,
+          coords: coords || [],
+          preferWaypoints: provider !== "waze",
+        });
+        const labels = { google: "Google Maps", apple: "Apple Maps", waze: "Waze" };
+        const via =
+          provider === "waze"
+            ? "destination"
+            : links.waypointsUsed
+              ? `${links.waypointsUsed} waypoints`
+              : "direct";
+        showToast(`Opening ${labels[provider]} (${via})`, "success");
+      } catch (err) {
+        showToast(err.message || "Could not open maps", "error");
+      }
+    }
+
+    els.exportRouteAvoid?.addEventListener("click", () => setExportRoute("avoid"));
+    els.exportRouteStandard?.addEventListener("click", () => setExportRoute("standard"));
+    els.btnExportGoogle?.addEventListener("click", () => exportRouteTo("google"));
+    els.btnExportApple?.addEventListener("click", () => exportRouteTo("apple"));
+    els.btnExportWaze?.addEventListener("click", () => exportRouteTo("waze"));
+    updateExportHint();
+
+    els.btnSaved.addEventListener("click", openSavedModal);
+    els.savedModal.querySelectorAll("[data-close-modal]").forEach((el) => {
+      el.addEventListener("click", closeSavedModal);
+    });
+
+    els.btnMenu.addEventListener("click", () => {
+      els.sidebar.classList.toggle("collapsed");
+      const open = !els.sidebar.classList.contains("collapsed");
+      els.btnMenu.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    // Layers
+    els.toggleCameras.addEventListener("change", () => {
+      state.showCameras = els.toggleCameras.checked;
+      if (state.showCameras) state.map.addLayer(state.layers.cameras);
+      else state.map.removeLayer(state.layers.cameras);
+    });
+    els.toggleStandard.addEventListener("change", () => {
+      state.showStandard = els.toggleStandard.checked;
+      if (state.showStandard) state.map.addLayer(state.layers.standard);
+      else state.map.removeLayer(state.layers.standard);
+    });
+    els.toggleAvoid.addEventListener("change", () => {
+      state.showAvoid = els.toggleAvoid.checked;
+      if (state.showAvoid) {
+        state.map.addLayer(state.layers.avoid);
+        state.map.addLayer(state.layers.vias);
+      } else {
+        state.map.removeLayer(state.layers.avoid);
+        state.map.removeLayer(state.layers.vias);
+      }
+    });
+    els.toggleBuffers.addEventListener("change", () => {
+      state.showBuffers = els.toggleBuffers.checked;
+      if (state.showBuffers) {
+        state.map.addLayer(state.layers.buffers);
+        const highlight = new Set([
+          ...(state.lastPlan?.camsOnStandard || []).map((c) => c.id),
+          ...(state.lastPlan?.camsOnAvoid || []).map((c) => c.id),
+        ]);
+        renderCameraMarkers(state.cameras, highlight);
+      } else {
+        state.map.removeLayer(state.layers.buffers);
+        state.layers.buffers.clearLayers();
+      }
+    });
+    els.toggleCommunity?.addEventListener("change", () => {
+      state.showCommunity = els.toggleCommunity.checked;
+      Storage.saveSettings({ showCommunity: state.showCommunity });
+      refreshCamerasAfterReportChange();
+    });
+
+    // Community report form
+    setupReportForm();
+
+    // Enter to route
+    [els.startInput, els.endInput].forEach((input) => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) {
+          e.preventDefault();
+          runPlan();
+        }
+      });
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeSavedModal();
+        if (state.reportPickMode) cancelReportPick();
+        else closeReportModal();
+      }
+    });
+
+    // Refresh premium panels when unlocks change (safety if UI loaded first)
+    if (typeof Premium !== "undefined" && Premium.onChange) {
+      Premium.onChange(() => {
+        if (typeof PremiumUI !== "undefined") PremiumUI.renderFeatureList();
+      });
+    }
+  }
+
+  // ---------- Community report form ----------
+  function openReportModal() {
+    if (!els.reportModal) return;
+    clearReportFormError();
+    // Prefill coords from map center if empty
+    if (state.map && (!els.reportLat.value || !els.reportLng.value)) {
+      const c = state.map.getCenter();
+      els.reportLat.value = c.lat.toFixed(6);
+      els.reportLng.value = c.lng.toFixed(6);
+      if (els.reportCoordsHint) {
+        els.reportCoordsHint.textContent = "Prefilled from map center — adjust or pick on map.";
+      }
+    }
+    els.reportModal.hidden = false;
+    els.reportName?.focus();
+  }
+
+  function closeReportModal() {
+    if (els.reportModal) els.reportModal.hidden = true;
+    cancelReportPick(false);
+  }
+
+  function clearReportFormError() {
+    if (els.reportFormError) {
+      els.reportFormError.hidden = true;
+      els.reportFormError.textContent = "";
+    }
+  }
+
+  function showReportFormError(msg) {
+    if (els.reportFormError) {
+      els.reportFormError.hidden = false;
+      els.reportFormError.textContent = msg;
+    }
+  }
+
+  function startReportPick() {
+    closeReportModal();
+    state.reportPickMode = true;
+    document.body.classList.add("report-pick-mode");
+    if (els.reportPickChip) els.reportPickChip.hidden = false;
+    showToast("Tap the map to place the camera", "success");
+  }
+
+  function cancelReportPick(reopen = true) {
+    state.reportPickMode = false;
+    document.body.classList.remove("report-pick-mode");
+    if (els.reportPickChip) els.reportPickChip.hidden = true;
+    if (reopen && els.reportModal && !els.reportLat?.value) {
+      // keep closed if user cancelled without coords intent
+    }
+  }
+
+  async function applyReportPick(latlng) {
+    state.reportPickMode = false;
+    document.body.classList.remove("report-pick-mode");
+    if (els.reportPickChip) els.reportPickChip.hidden = true;
+
+    els.reportLat.value = latlng.lat.toFixed(6);
+    els.reportLng.value = latlng.lng.toFixed(6);
+
+    try {
+      const rev = await Geocoding.reverse(latlng.lat, latlng.lng);
+      if (els.reportAddress && !els.reportAddress.value) {
+        els.reportAddress.value = rev.display_name.split(",").slice(0, 3).join(",").trim();
+      }
+      if (els.reportName && !els.reportName.value.trim()) {
+        els.reportName.value = rev.display_name.split(",")[0].trim().slice(0, 80);
+      }
+    } catch {
+      /* optional */
+    }
+
+    if (els.reportCoordsHint) {
+      els.reportCoordsHint.textContent = "Location set from map pin.";
+    }
+    openReportModal();
+    showToast("Location set — finish and save the report", "success");
+  }
+
+  function setupReportForm() {
+    const open = () => openReportModal();
+    els.btnReport?.addEventListener("click", open);
+    els.btnReportOpen?.addEventListener("click", open);
+    els.reportModal?.querySelectorAll("[data-close-report]").forEach((el) => {
+      el.addEventListener("click", closeReportModal);
+    });
+
+    els.btnReportPick?.addEventListener("click", startReportPick);
+
+    els.btnReportGps?.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showReportFormError("Geolocation not supported");
+        return;
+      }
+      els.btnReportGps.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          els.reportLat.value = pos.coords.latitude.toFixed(6);
+          els.reportLng.value = pos.coords.longitude.toFixed(6);
+          try {
+            const rev = await Geocoding.reverse(pos.coords.latitude, pos.coords.longitude);
+            if (els.reportAddress) els.reportAddress.value = rev.display_name.split(",").slice(0, 3).join(",").trim();
+            if (els.reportName && !els.reportName.value.trim()) {
+              els.reportName.value = rev.display_name.split(",")[0].trim().slice(0, 80);
+            }
+          } catch {
+            /* ignore */
+          }
+          if (els.reportCoordsHint) els.reportCoordsHint.textContent = "Location set from GPS.";
+          els.btnReportGps.disabled = false;
+          showToast("GPS location filled", "success");
+        },
+        (err) => {
+          els.btnReportGps.disabled = false;
+          showReportFormError(err.message || "Could not get GPS location");
+        },
+        { enableHighAccuracy: true, timeout: 12000 }
+      );
+    });
+
+    els.reportForm?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearReportFormError();
+
+      const name = els.reportName?.value?.trim() || "";
+      const lat = parseFloat(els.reportLat?.value);
+      const lng = parseFloat(els.reportLng?.value);
+
+      if (!name) {
+        showReportFormError("Add a short location label");
+        els.reportName?.focus();
+        return;
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        showReportFormError("Enter valid latitude and longitude, or pick on the map");
+        return;
+      }
+
+      try {
+        const entry = Storage.addReport({
+          name,
+          lat,
+          lng,
+          type: els.reportType?.value || "Flock",
+          confidence: els.reportConfidence?.value || "sighted",
+          direction: els.reportDirection?.value || "",
+          address: els.reportAddress?.value || "",
+          notes: els.reportNotes?.value || "",
+        });
+
+        els.reportForm.reset();
+        closeReportModal();
+        refreshCommunityUI();
+        refreshCamerasAfterReportChange();
+        state.map?.setView([entry.lat, entry.lng], Math.max(state.map.getZoom(), 14));
+        showToast("Camera report saved on this device", "success");
+      } catch (err) {
+        showReportFormError(err.message || "Could not save report");
+      }
+    });
+  }
+
+  // ---------- PWA UI ----------
+  function setupPWA() {
+    const settings = Storage.loadSettings();
+    if (settings.bufferMeters) {
+      state.bufferMeters = settings.bufferMeters;
+      els.bufferSlider.value = String(settings.bufferMeters);
+      els.bufferValue.textContent = `${settings.bufferMeters} m`;
+    }
+    if (typeof settings.showCommunity === "boolean") {
+      state.showCommunity = settings.showCommunity;
+      if (els.toggleCommunity) els.toggleCommunity.checked = settings.showCommunity;
+    }
+
+    PWA.init({
+      onPromptAvailable(available) {
+        els.btnInstall.classList.toggle("hidden", !available);
+        els.btnInstall.classList.toggle("inline-flex", available);
+        if (available && !settings.installDismissed) {
+          els.installBanner.hidden = false;
+        }
+      },
+      onInstalled() {
+        els.btnInstall.classList.add("hidden");
+        els.installBanner.hidden = true;
+        showToast("Flock Dodger installed", "success");
+      },
+    });
+
+    const doInstall = async () => {
+      const result = await PWA.promptInstall();
+      if (result.outcome === "unavailable") {
+        showToast("Use your browser’s Install / Add to Home Screen menu", "error");
+      }
+      els.installBanner.hidden = true;
+    };
+
+    els.btnInstall.addEventListener("click", doInstall);
+    els.btnInstallBanner.addEventListener("click", doInstall);
+    els.btnDismissInstall.addEventListener("click", () => {
+      els.installBanner.hidden = true;
+      Storage.saveSettings({ installDismissed: true });
+    });
+  }
+
+  // ---------- Boot ----------
+  function boot() {
+    initMap();
+    bindEvents();
+    setupPWA();
+    updateMapEmpty();
+    updateOnlineStatus();
+    refreshCommunityUI();
+
+    console.info(
+      "%cFlock Dodger%c ready — privacy-first routing",
+      "color:#3dd68c;font-weight:bold",
+      "color:#9fb5a8"
+    );
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();

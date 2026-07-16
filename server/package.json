@@ -1,0 +1,12 @@
+{
+  "name": "flock-dodger-stripe-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node create-checkout.mjs",
+    "dev": "node create-checkout.mjs"
+  },
+  "dependencies": {
+    "stripe": "^17.5.0"
+  }
+}

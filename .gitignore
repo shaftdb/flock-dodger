@@ -1,0 +1,29 @@
+# Dependencies / local servers
+node_modules/
+server/node_modules/
+.package-lock.json
+
+# Environment / secrets (never commit Stripe keys)
+.env
+.env.*
+!.env.example
+server/.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+.idea/
+.vscode/
+*.log
+
+# Local tooling
+.cache/
+dist/
+build/
+.vercel
+.netlify
+
+# Optional local session junk
+*.tmp

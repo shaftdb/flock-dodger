@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Flock Dodger — privacy-first routing to avoid ALPR and Flock Safety cameras." />
+  <meta name="theme-color" content="#0a0f0d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Flock Dodger" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Flock Dodger — Avoid ALPR Cameras</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            flock: {
+              bg: '#0a0f0d',
+              surface: '#111916',
+              card: '#15201b',
+              border: '#1e2e26',
+              muted: '#6b8578',
+              text: '#e8f0eb',
+              dim: '#9fb5a8',
+              accent: '#3dd68c',
+              accentDim: '#2a9d64',
+              warn: '#f5a623',
+              danger: '#ef4444',
+              route: '#38bdf8',
+              avoid: '#3dd68c',
+            }
+          },
+          fontFamily: {
+            sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          boxShadow: {
+            glow: '0 0 24px rgba(61, 214, 140, 0.15)',
+            'glow-sm': '0 0 12px rgba(61, 214, 140, 0.12)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="bg-flock-bg text-flock-text font-sans antialiased min-h-dvh overflow-hidden">
+  <!-- Skip link -->
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:z-[9999] focus:p-3 focus:bg-flock-accent focus:text-flock-bg">Skip to app</a>
+
+  <div id="app" class="flex flex-col h-dvh">
+    <!-- Header -->
+    <header class="shrink-0 z-30 border-b border-flock-border bg-flock-surface/90 backdrop-blur-md">
+      <div class="flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-flock-accent/15 ring-1 ring-flock-accent/30 shadow-glow-sm" aria-hidden="true">
+            <svg class="h-5 w-5 text-flock-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-base sm:text-lg font-semibold tracking-tight truncate">Flock Dodger</h1>
+            <p class="text-[11px] text-flock-muted leading-none hidden xs:block">Privacy-first ALPR avoidance</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <button id="btn-premium" type="button" class="btn-icon relative" title="Premium unlocks" aria-label="Premium unlocks">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6L12 2z"/></svg>
+            <span id="premium-dot" class="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-flock-accent hidden" aria-hidden="true"></span>
+          </button>
+          <button id="btn-report" type="button" class="btn-icon" title="Report a camera" aria-label="Report a community camera">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+          <button id="btn-saved" type="button" class="btn-icon" title="Saved routes" aria-label="Saved routes">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          </button>
+          <button id="btn-install" type="button" class="hidden items-center gap-1.5 rounded-lg bg-flock-accent/15 px-2.5 py-1.5 text-xs font-medium text-flock-accent ring-1 ring-flock-accent/30 hover:bg-flock-accent/25 transition-colors" title="Install app">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+            <span class="hidden sm:inline">Install</span>
+          </button>
+          <button id="btn-menu" type="button" class="btn-icon lg:hidden" title="Toggle panel" aria-label="Toggle controls" aria-expanded="true" aria-controls="sidebar">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="flex flex-1 min-h-0 relative">
+      <!-- Sidebar / controls -->
+      <aside id="sidebar" class="sidebar absolute lg:relative inset-x-0 bottom-0 lg:inset-auto z-20 lg:z-10 flex flex-col w-full lg:w-[380px] xl:w-[400px] max-h-[72dvh] lg:max-h-none lg:h-full bg-flock-surface border-t lg:border-t-0 lg:border-r border-flock-border shadow-2xl lg:shadow-none transition-transform duration-300 ease-out rounded-t-2xl lg:rounded-none">
+        <!-- Mobile drag handle -->
+        <div class="lg:hidden flex justify-center pt-2 pb-1" aria-hidden="true">
+          <div class="h-1 w-10 rounded-full bg-flock-border"></div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 pb-4 space-y-4 custom-scroll">
+          <!-- Privacy notice -->
+          <div class="mt-1 flex gap-2 rounded-xl bg-flock-accent/5 border border-flock-accent/20 px-3 py-2.5 text-xs text-flock-dim">
+            <svg class="h-4 w-4 shrink-0 text-flock-accent mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <p><strong class="text-flock-text font-medium">Local-first.</strong> Routes stay on your device. Geocoding uses public OpenStreetMap. No account required.</p>
+          </div>
+
+          <!-- Route inputs -->
+          <section aria-labelledby="route-heading">
+            <h2 id="route-heading" class="section-label">Route</h2>
+            <div class="space-y-2.5">
+              <div id="route-error" class="error-banner" hidden role="alert">
+                <div class="flex gap-2 items-start">
+                  <svg class="h-4 w-4 shrink-0 mt-0.5 text-flock-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                  <div class="min-w-0 flex-1">
+                    <p id="route-error-text" class="text-xs text-red-200 leading-relaxed"></p>
+                    <button type="button" id="btn-route-retry" class="mt-1.5 text-[11px] font-semibold text-flock-accent hover:underline">Retry</button>
+                  </div>
+                  <button type="button" id="btn-route-error-dismiss" class="btn-icon h-7 w-7 shrink-0" aria-label="Dismiss error">
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="relative">
+                <label for="start-input" class="sr-only">Start address</label>
+                <div class="input-wrap" id="start-wrap">
+                  <span class="input-icon text-flock-accent" aria-hidden="true">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
+                  </span>
+                  <input id="start-input" type="text" autocomplete="off" placeholder="Start address or place" class="field" />
+                  <span id="start-spinner" class="field-spinner" hidden aria-hidden="true"></span>
+                  <button type="button" id="btn-locate" class="input-action" title="Use my location" aria-label="Use my location">
+                    <svg class="h-4 w-4 locate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                  </button>
+                </div>
+                <p id="start-error" class="field-error" hidden></p>
+                <ul id="start-suggestions" class="suggestions" hidden role="listbox"></ul>
+              </div>
+
+              <div class="flex justify-center -my-1">
+                <button type="button" id="btn-swap" class="btn-icon h-8 w-8 text-flock-muted hover:text-flock-accent" title="Swap start and end" aria-label="Swap addresses">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                </button>
+              </div>
+
+              <div class="relative">
+                <label for="end-input" class="sr-only">End address</label>
+                <div class="input-wrap" id="end-wrap">
+                  <span class="input-icon text-flock-danger" aria-hidden="true">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>
+                  </span>
+                  <input id="end-input" type="text" autocomplete="off" placeholder="Destination address or place" class="field" />
+                  <span id="end-spinner" class="field-spinner" hidden aria-hidden="true"></span>
+                </div>
+                <p id="end-error" class="field-error" hidden></p>
+                <ul id="end-suggestions" class="suggestions" hidden role="listbox"></ul>
+              </div>
+
+              <button id="btn-route" type="button" class="btn-primary w-full">
+                <span class="btn-route-idle inline-flex items-center gap-2">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                  Find privacy routes
+                </span>
+                <span class="btn-route-loading hidden inline-flex items-center gap-2">
+                  <span class="btn-spinner" aria-hidden="true"></span>
+                  Planning…
+                </span>
+              </button>
+              <p class="text-[10px] text-flock-muted leading-relaxed">
+                Drag <strong class="text-flock-dim">A / B</strong> markers or green handles on the map to reshape the route.
+              </p>
+              <div class="grid grid-cols-2 gap-2">
+                <button id="btn-demo-wv" type="button" class="btn-secondary text-xs">
+                  WV / OH demo
+                </button>
+                <button id="btn-demo" type="button" class="btn-secondary text-xs">
+                  Austin demo
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Avoidance buffer -->
+          <section aria-labelledby="buffer-heading">
+            <div class="flex items-center justify-between mb-2">
+              <h2 id="buffer-heading" class="section-label mb-0">Avoidance buffer</h2>
+              <span id="buffer-value" class="font-mono text-sm text-flock-accent font-medium">150 m</span>
+            </div>
+            <input id="buffer-slider" type="range" min="50" max="500" step="25" value="150" class="buffer-slider w-full" aria-valuemin="50" aria-valuemax="500" aria-valuenow="150" aria-label="Camera avoidance buffer in meters" />
+            <div class="flex justify-between text-[10px] text-flock-muted mt-1 font-mono">
+              <span>50m</span>
+              <span>tight</span>
+              <span>wide</span>
+              <span>500m</span>
+            </div>
+          </section>
+
+          <!-- Stats / privacy score -->
+          <section id="stats-panel" class="hidden" aria-labelledby="stats-heading" aria-live="polite">
+            <h2 id="stats-heading" class="section-label">Privacy analysis</h2>
+
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <div class="stat-card col-span-2">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs text-flock-muted mb-1">Privacy score</p>
+                    <p id="privacy-score" class="text-3xl font-bold tracking-tight text-flock-accent font-mono">—</p>
+                    <p id="privacy-label" class="text-xs text-flock-dim mt-0.5">Route not calculated</p>
+                  </div>
+                  <div class="score-ring" id="score-ring" aria-hidden="true">
+                    <svg viewBox="0 0 80 80" class="h-20 w-20 -rotate-90">
+                      <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" stroke-width="6" class="text-flock-border" />
+                      <circle id="score-arc" cx="40" cy="40" r="34" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" class="text-flock-accent transition-all duration-700" stroke-dasharray="213.6" stroke-dashoffset="213.6" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <p class="text-[11px] text-flock-muted">Cameras avoided</p>
+                <p id="stat-avoided" class="stat-value text-flock-accent">0</p>
+                <p class="text-[10px] text-flock-muted">of <span id="stat-on-standard">0</span> on standard</p>
+              </div>
+              <div class="stat-card">
+                <p class="text-[11px] text-flock-muted">Still on avoid route</p>
+                <p id="stat-remaining" class="stat-value text-flock-warn">0</p>
+                <p class="text-[10px] text-flock-muted">within buffer</p>
+              </div>
+              <div class="stat-card">
+                <p class="text-[11px] text-flock-muted">Extra distance</p>
+                <p id="stat-extra-dist" class="stat-value">—</p>
+                <p class="text-[10px] text-flock-muted">vs standard</p>
+              </div>
+              <div class="stat-card">
+                <p class="text-[11px] text-flock-muted">Extra time</p>
+                <p id="stat-extra-time" class="stat-value">—</p>
+                <p class="text-[10px] text-flock-muted">est. driving</p>
+              </div>
+            </div>
+
+            <!-- Route comparison -->
+            <div class="space-y-2">
+              <div class="route-row" data-route="standard">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-full bg-flock-route ring-2 ring-flock-route/30"></span>
+                  <span class="text-sm font-medium">Standard</span>
+                </div>
+                <div class="text-right">
+                  <p id="std-distance" class="text-sm font-mono">—</p>
+                  <p id="std-duration" class="text-[11px] text-flock-muted font-mono">—</p>
+                </div>
+              </div>
+              <div class="route-row ring-1 ring-flock-accent/30 bg-flock-accent/5" data-route="avoid">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-full bg-flock-avoid ring-2 ring-flock-avoid/30"></span>
+                  <span class="text-sm font-medium">Camera-avoiding</span>
+                </div>
+                <div class="text-right">
+                  <p id="avoid-distance" class="text-sm font-mono text-flock-accent">—</p>
+                  <p id="avoid-duration" class="text-[11px] text-flock-muted font-mono">—</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex gap-2 mt-3">
+              <button id="btn-save-route" type="button" class="btn-secondary flex-1 text-xs">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                Save route
+              </button>
+              <button id="btn-fit" type="button" class="btn-secondary flex-1 text-xs">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+                Fit map
+              </button>
+            </div>
+
+            <!-- Export to navigation apps -->
+            <div class="mt-3 rounded-xl border border-flock-border bg-flock-bg/50 px-3 py-2.5">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-flock-muted">Open in maps</p>
+                <div class="flex items-center gap-1 rounded-lg bg-flock-surface border border-flock-border p-0.5" role="group" aria-label="Which route to export">
+                  <button type="button" id="export-route-avoid" class="export-route-tab export-route-tab--active" data-export-route="avoid" title="Camera-avoiding route">Avoid</button>
+                  <button type="button" id="export-route-standard" class="export-route-tab" data-export-route="standard" title="Standard route">Standard</button>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button type="button" id="btn-export-google" class="export-map-btn" title="Open in Google Maps" aria-label="Open route in Google Maps">
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#fff"/></svg>
+                  <span>Google</span>
+                </button>
+                <button type="button" id="btn-export-apple" class="export-map-btn" title="Open in Apple Maps" aria-label="Open route in Apple Maps">
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.37 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                  <span>Apple</span>
+                </button>
+                <button type="button" id="btn-export-waze" class="export-map-btn" title="Open in Waze" aria-label="Open destination in Waze">
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#33CCFF"/><path fill="#fff" d="M12 6.5c-3.2 0-5.5 2.1-5.5 5.2 0 1.9 1.1 3.5 2.7 4.4l.3 1.4c.1.4.5.7.9.7h3.2c.4 0 .8-.3.9-.7l.3-1.4c1.6-.9 2.7-2.5 2.7-4.4 0-3.1-2.3-5.2-5.5-5.2zm-2.2 5.8a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2zm4.4 0a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2z"/></svg>
+                  <span>Waze</span>
+                </button>
+              </div>
+              <p id="export-hint" class="text-[10px] text-flock-muted mt-2 leading-relaxed">
+                Sends start, end, and sampled waypoints from the privacy route. Apps may re-route slightly.
+              </p>
+            </div>
+          </section>
+
+          <!-- Layer toggles -->
+          <section aria-labelledby="layers-heading">
+            <h2 id="layers-heading" class="section-label">Map layers</h2>
+            <div class="space-y-2">
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-flock-danger"></span>
+                  ALPR / Flock cameras
+                </span>
+                <input type="checkbox" id="toggle-cameras" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-flock-route"></span>
+                  Standard route
+                </span>
+                <input type="checkbox" id="toggle-standard" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-flock-avoid"></span>
+                  Avoidance route
+                </span>
+                <input type="checkbox" id="toggle-avoid" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-flock-warn/80"></span>
+                  Buffer zones
+                </span>
+                <input type="checkbox" id="toggle-buffers" class="toggle" />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-violet-400"></span>
+                  Community reports
+                </span>
+                <input type="checkbox" id="toggle-community" class="toggle" checked />
+              </label>
+            </div>
+          </section>
+
+          <!-- Community reports -->
+          <section aria-labelledby="community-heading">
+            <div class="flex items-center justify-between mb-2">
+              <h2 id="community-heading" class="section-label mb-0">Community cameras</h2>
+              <span id="report-count" class="font-mono text-[11px] text-flock-muted">0</span>
+            </div>
+            <p class="text-xs text-flock-muted mb-2 leading-relaxed">
+              Spot a Flock or ALPR unit? Save it on this device. Reports stay local unless you export them.
+            </p>
+            <button type="button" id="btn-report-open" class="btn-secondary w-full text-xs">
+              <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Report a camera
+            </button>
+            <div id="community-list" class="mt-2 space-y-1.5 max-h-40 overflow-y-auto custom-scroll">
+              <!-- filled by JS -->
+            </div>
+            <p id="community-empty" class="text-[11px] text-flock-muted text-center py-3">No local reports yet.</p>
+          </section>
+
+          <!-- Premium features -->
+          <section aria-labelledby="premium-heading">
+            <div class="flex items-center justify-between mb-2">
+              <h2 id="premium-heading" class="section-label mb-0">Premium</h2>
+              <button type="button" id="btn-premium-open" class="text-[11px] font-medium text-flock-accent hover:underline">Unlock options</button>
+            </div>
+            <div id="premium-feature-list" class="space-y-2">
+              <!-- filled by premium UI -->
+            </div>
+            <div class="mt-2 rounded-xl border border-flock-border bg-flock-bg/60 px-3 py-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-sm font-medium">Full bundle</p>
+                  <p class="text-[11px] text-flock-muted">All premium features · one-time</p>
+                </div>
+                <div class="text-right shrink-0">
+                  <p id="bundle-price" class="text-sm font-mono text-flock-accent font-semibold">$9.99</p>
+                  <button type="button" id="btn-buy-bundle" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">Buy with Stripe</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Unlocked feature panels -->
+          <section id="premium-active-panels" class="space-y-2 hidden" aria-label="Unlocked premium tools"></section>
+
+          <p class="text-[10px] text-flock-muted leading-relaxed pb-2">
+            Camera data is mock / approximate (dense for OH &amp; WV corridors, broader US metros). Community-pattern points reflect reported presence, not exact GPS. Not legal advice; locations may be incomplete or outdated.
+          </p>
+        </div>
+      </aside>
+
+      <!-- Map -->
+      <main id="main" class="relative flex-1 min-w-0 min-h-0">
+        <div id="map" class="absolute inset-0 z-0" role="application" aria-label="Route map"></div>
+
+        <!-- Top progress bar -->
+        <div id="map-progress" class="map-progress" hidden aria-hidden="true">
+          <div id="map-progress-bar" class="map-progress-bar"></div>
+        </div>
+
+        <!-- Empty / tip state -->
+        <div id="map-empty" class="pointer-events-none absolute inset-x-3 top-3 z-10 sm:inset-x-auto sm:left-3 sm:right-auto sm:max-w-xs">
+          <div class="pointer-events-auto rounded-xl bg-flock-surface/92 backdrop-blur-md border border-flock-border px-3.5 py-3 shadow-lg">
+            <p class="text-sm font-medium text-flock-text">Plan a private drive</p>
+            <p class="text-xs text-flock-muted mt-1 leading-relaxed">Enter start &amp; end, try a demo, or long-press the map to drop a pin.</p>
+            <ul class="mt-2 space-y-1 text-[11px] text-flock-dim">
+              <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-accent"></span> Drag A/B to move endpoints</li>
+              <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-avoid"></span> Drag green handles to bend the avoid route</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Online status -->
+        <div id="offline-chip" class="offline-chip" hidden role="status">You’re offline — routing may use fallback geometry</div>
+
+        <!-- Map legend (desktop) -->
+        <div class="pointer-events-none absolute top-3 right-3 z-10 hidden sm:block">
+          <div class="pointer-events-auto rounded-xl bg-flock-surface/90 backdrop-blur-md border border-flock-border px-3 py-2.5 shadow-lg text-xs space-y-1.5">
+            <p class="font-medium text-flock-dim mb-1">Legend</p>
+            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-flock-danger"></span> ALPR camera</div>
+            <div class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-violet-400"></span> Community report</div>
+            <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-route rounded"></span> Standard route</div>
+            <div class="flex items-center gap-2"><span class="h-0.5 w-4 bg-flock-avoid rounded"></span> Avoidance route</div>
+            <div class="flex items-center gap-2"><span class="via-dot-sm"></span> Drag handle</div>
+          </div>
+        </div>
+
+        <!-- Drag status chip -->
+        <div id="drag-chip" class="drag-chip" hidden>Release to recalculate…</div>
+
+        <!-- Report pin-pick mode -->
+        <div id="report-pick-chip" class="drag-chip report-pick-chip" hidden>
+          Tap the map to set camera location · Esc to cancel
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="loading" class="hidden absolute inset-0 z-20 flex items-center justify-center bg-flock-bg/45 backdrop-blur-[2px]">
+          <div class="flex flex-col items-center gap-3 rounded-2xl bg-flock-card border border-flock-border px-6 py-5 shadow-glow min-w-[200px]">
+            <div class="spinner" aria-hidden="true"></div>
+            <p id="loading-text" class="text-sm text-flock-dim text-center">Calculating routes…</p>
+            <div class="loading-steps" id="loading-steps" aria-hidden="true">
+              <span data-step="geo">Geocode</span>
+              <span data-step="route">Route</span>
+              <span data-step="score">Score</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toast -->
+        <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Community camera report modal -->
+  <div id="report-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-report></div>
+    <div class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="report-title">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="report-title" class="text-lg font-semibold">Report a camera</h2>
+        <button type="button" class="btn-icon" data-close-report aria-label="Close">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="text-xs text-flock-muted mb-4 leading-relaxed">
+        Saved only in this browser’s localStorage. Used for your privacy routes on this device.
+      </p>
+
+      <form id="report-form" class="space-y-3" novalidate>
+        <div>
+          <label class="form-label" for="report-name">Location label</label>
+          <input id="report-name" name="name" type="text" class="form-field" maxlength="120" placeholder="e.g. US-50 @ bridge approach" required />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="form-label" for="report-type">Camera type</label>
+            <select id="report-type" name="type" class="form-field">
+              <option value="Flock">Flock Safety</option>
+              <option value="ALPR">ALPR (generic)</option>
+              <option value="Municipal ALPR">Municipal ALPR</option>
+              <option value="Unknown">Unknown / other</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="report-confidence">Confidence</label>
+            <select id="report-confidence" name="confidence" class="form-field">
+              <option value="confirmed">Confirmed (seen up close)</option>
+              <option value="sighted" selected>Sighted (driving by)</option>
+              <option value="suspected">Suspected</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" for="report-direction">Facing / coverage</label>
+          <select id="report-direction" name="direction" class="form-field">
+            <option value="">Not sure</option>
+            <option value="N">Northbound</option>
+            <option value="S">Southbound</option>
+            <option value="E">Eastbound</option>
+            <option value="W">Westbound</option>
+            <option value="both">Both / multi</option>
+            <option value="lot">Parking lot / private</option>
+          </select>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <label class="form-label mb-0" for="report-lat">Coordinates</label>
+            <div class="flex gap-1">
+              <button type="button" id="btn-report-pick" class="text-[11px] font-medium text-flock-accent hover:underline">Pick on map</button>
+              <span class="text-flock-muted text-[11px]">·</span>
+              <button type="button" id="btn-report-gps" class="text-[11px] font-medium text-flock-accent hover:underline">Use GPS</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="report-lat" name="lat" type="number" step="any" inputmode="decimal" class="form-field font-mono text-xs" placeholder="Latitude" required />
+            <input id="report-lng" name="lng" type="number" step="any" inputmode="decimal" class="form-field font-mono text-xs" placeholder="Longitude" required />
+          </div>
+          <p id="report-coords-hint" class="text-[10px] text-flock-muted mt-1">Map center used if empty when you open the form.</p>
+        </div>
+
+        <div>
+          <label class="form-label" for="report-address">Nearest address <span class="text-flock-muted font-normal">(optional)</span></label>
+          <input id="report-address" name="address" type="text" class="form-field" maxlength="200" placeholder="Street or landmark" />
+        </div>
+
+        <div>
+          <label class="form-label" for="report-notes">Notes <span class="text-flock-muted font-normal">(optional)</span></label>
+          <textarea id="report-notes" name="notes" class="form-field form-textarea" maxlength="500" rows="3" placeholder="Pole type, retail lot, facing which lanes…"></textarea>
+        </div>
+
+        <p id="report-form-error" class="field-error" hidden></p>
+
+        <div class="flex gap-2 pt-1">
+          <button type="button" class="btn-secondary flex-1 text-xs" data-close-report>Cancel</button>
+          <button type="submit" id="btn-report-submit" class="btn-primary flex-1 text-xs">Save report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Saved routes modal -->
+  <div id="saved-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="saved-title">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="saved-title" class="text-lg font-semibold">Saved routes</h2>
+        <button type="button" class="btn-icon" data-close-modal aria-label="Close">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="saved-list" class="space-y-2 max-h-[50dvh] overflow-y-auto custom-scroll">
+        <!-- filled by JS -->
+      </div>
+      <p id="saved-empty" class="text-sm text-flock-muted text-center py-8 hidden">No saved routes yet. Plan a route and tap Save.</p>
+    </div>
+  </div>
+
+  <!-- Premium unlock modal -->
+  <div id="premium-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-premium></div>
+    <div class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="premium-modal-title">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="premium-modal-title" class="text-lg font-semibold">Unlock feature</h2>
+        <button type="button" class="btn-icon" data-close-premium aria-label="Close">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="premium-modal-body" class="space-y-4">
+        <!-- dynamic -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Rewarded ad placeholder modal -->
+  <div id="ad-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel max-w-sm" role="dialog" aria-modal="true" aria-labelledby="ad-modal-title">
+      <p class="text-[10px] uppercase tracking-wider text-flock-muted font-semibold mb-2">Sponsored · placeholder</p>
+      <h2 id="ad-modal-title" class="text-base font-semibold mb-1">Watch to unlock</h2>
+      <p id="ad-modal-sub" class="text-xs text-flock-muted mb-4">Stay on this screen until the reward is ready.</p>
+
+      <div class="ad-stage" aria-hidden="true">
+        <div class="ad-stage-inner">
+          <div class="ad-badge">AD</div>
+          <p class="text-sm font-medium text-white/90">Privacy-friendly brands</p>
+          <p class="text-xs text-white/60 mt-1">Rewarded ad SDK placeholder</p>
+          <div class="ad-bars" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="flex justify-between text-[11px] text-flock-muted mb-1.5">
+          <span id="ad-status">Loading ad…</span>
+          <span id="ad-countdown" class="font-mono">—</span>
+        </div>
+        <div class="ad-progress-track">
+          <div id="ad-progress-bar" class="ad-progress-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button type="button" id="btn-ad-cancel" class="btn-secondary flex-1 text-xs">Cancel</button>
+        <button type="button" id="btn-ad-claim" class="btn-primary flex-1 text-xs" disabled>Claim reward</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo Stripe checkout modal -->
+  <div id="stripe-demo-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-stripe-demo></div>
+    <div class="modal-panel max-w-sm" role="dialog" aria-modal="true" aria-labelledby="stripe-demo-title">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#635bff]/15 text-[#635bff]">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305h.000z"/></svg>
+        </div>
+        <div>
+          <h2 id="stripe-demo-title" class="text-base font-semibold">Stripe Checkout</h2>
+          <p class="text-[11px] text-flock-muted">Demo mode — no real charge</p>
+        </div>
+      </div>
+      <p id="stripe-demo-desc" class="text-sm text-flock-dim mb-4">One-time unlock will be stored on this device.</p>
+      <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-3 mb-4">
+        <div class="flex justify-between text-sm">
+          <span id="stripe-demo-item">Feature</span>
+          <span id="stripe-demo-price" class="font-mono text-flock-accent font-semibold">$0.00</span>
+        </div>
+        <p class="text-[10px] text-flock-muted mt-2">Configure real keys in <code class="text-flock-dim">js/config.js</code> or run <code class="text-flock-dim">server/create-checkout.mjs</code>.</p>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="btn-secondary flex-1 text-xs" data-close-stripe-demo>Cancel</button>
+        <button type="button" id="btn-stripe-demo-pay" class="btn-primary flex-1 text-xs">Pay &amp; unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Install banner (mobile) -->
+  <div id="install-banner" class="install-banner" hidden>
+    <div class="flex items-center gap-3">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flock-accent/15 text-flock-accent">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium">Install Flock Dodger</p>
+        <p class="text-xs text-flock-muted">Add to home screen for quick private access</p>
+      </div>
+      <button id="btn-install-banner" type="button" class="btn-primary text-xs px-3 py-1.5 shrink-0">Install</button>
+      <button id="btn-dismiss-install" type="button" class="btn-icon shrink-0" aria-label="Dismiss">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Stripe.js (only used when publishableKey is set) -->
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="js/config.js"></script>
+  <script src="js/camera-data.js"></script>
+  <script src="js/cameras.js"></script>
+  <script src="js/geocoding.js"></script>
+  <script src="js/routing.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/export-maps.js"></script>
+  <script src="js/premium.js"></script>
+  <script src="js/premium-ui.js"></script>
+  <script src="js/pwa.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Flock Dodger">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3dd68c"/>
+      <stop offset="100%" stop-color="#2a9d64"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0a0f0d"/>
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="#111916" stroke="#1e2e26" stroke-width="8"/>
+  <path d="M256 96c-72 0-144 40-144 120v88c0 72 96 144 144 176 48-32 144-104 144-176v-88c0-80-72-120-144-120z" fill="none" stroke="url(#g)" stroke-width="28" stroke-linejoin="round"/>
+  <path d="M196 252l42 42 78-86" fill="none" stroke="url(#g)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="386" cy="150" r="28" fill="#ef4444" opacity="0.9"/>
+  <circle cx="386" cy="150" r="12" fill="#0a0f0d"/>
+</svg>

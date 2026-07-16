@@ -1,0 +1,42 @@
+{
+  "name": "Flock Dodger",
+  "short_name": "Flock Dodger",
+  "description": "Privacy-first routing to avoid ALPR and Flock Safety cameras.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0f0d",
+  "theme_color": "#0a0f0d",
+  "lang": "en",
+  "categories": ["navigation", "utilities", "lifestyle"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Plan a route",
+      "short_name": "Route",
+      "description": "Open Flock Dodger to plan a privacy route",
+      "url": "./index.html",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
