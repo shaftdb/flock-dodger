@@ -1,48 +1,37 @@
 /**
  * Flock Dodger — public configuration
  *
- * Payments: personal PayPal/Cash App removed (privacy).
+ * Payments: Cash App only ($brewologist).
  *
- * Easiest private options if you want money later (pick one):
- *
- * 1) Project-only crypto wallet (recommended privacy)
- *    - Make a FREE wallet just for Flock Dodger (not your daily wallet).
- *    - Paste public receive address below — page shows only the address, not your name.
- *    - Examples: Strike, Muun, Cash App BTC *receive only if separate*, Exodus, etc.
- *
- * 2) Brand page under a project name (not your real name)
- *    - Ko-fi / Buy Me a Coffee as "FlockDodger" — still a new account, but no personal feed.
- *
- * 3) Real business payments later
- *    - Stripe or PayPal Business under a business/DBA name when you're ready.
- *
- * Until you fill crypto.addresses, the app is free-only (no payment buttons).
+ * Security note:
+ * - A $cashtag is a *receive* handle. Knowing it does NOT let someone log into
+ *   your Cash App (they still need password / PIN / biometrics / 2FA).
+ * - You cannot fully hide a payment destination and still get paid easily.
+ * - UI shows a “Pay with Cash App” button; cashtag is not plastered large.
+ * - In Cash App: enable 2FA, lock the app, and review Privacy so strangers
+ *   can’t easily find you by phone/email if you prefer.
  */
 
 const AppConfig = {
   payments: {
-    /**
-     * Optional project crypto receive addresses (public only — never seed phrases).
-     * Leave empty = free-only mode (recommended until you set this up).
-     */
-    crypto: {
-      /** e.g. Bitcoin receive address for a wallet used ONLY for this project */
-      btc: "",
-      /** optional USDT */
-      usdt: "",
-      usdtNetwork: "",
-    },
+    /** Cash App $cashtag without the $ */
+    cashAppTag: "brewologist",
 
     amounts: {
       tip: "3",
       supporter: "15",
     },
 
-    /** Unlock Supporter after user confirms they sent crypto (honor system) */
+    /** Unlock Supporter after user confirms they sent payment (honor system) */
     honorUnlock: true,
+
+    crypto: {
+      btc: "",
+      usdt: "",
+      usdtNetwork: "",
+    },
   },
 
-  /** @deprecated kept empty — do not use personal accounts */
   rumble: {
     username: "",
     channelUrl: "",
@@ -61,15 +50,14 @@ const AppConfig = {
   },
 
   support: {
-    /** Soft “thanks / free forever” only — no payment pitch if no crypto configured */
     softPromptEnabled: true,
-    softPromptEveryNRoutes: 12,
-    softPromptSnoozeDays: 21,
+    softPromptEveryNRoutes: 10,
+    softPromptSnoozeDays: 14,
   },
 
   prices: {
-    tip: { amount: 3, label: "$3", note: "Optional crypto tip" },
-    supporter: { amount: 15, label: "$15", note: "Optional crypto Supporter" },
+    tip: { amount: 3, label: "$3", note: "Tip via Cash App" },
+    supporter: { amount: 15, label: "$15", note: "Supporter via Cash App" },
   },
 
   cameras: {

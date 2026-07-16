@@ -165,10 +165,12 @@ const Premium = (() => {
 
   function paymentOptionsConfigured() {
     const p = paymentsConfig();
+    const cashApp = Boolean((p.cashAppTag || "").trim());
     const crypto = Boolean((p.crypto?.btc || "").trim() || (p.crypto?.usdt || "").trim());
     return {
+      cashApp,
       crypto,
-      any: crypto,
+      any: cashApp || crypto,
     };
   }
 
@@ -181,8 +183,18 @@ const Premium = (() => {
     return "";
   }
 
-  function buildCashAppUrl() {
-    return "";
+  /** Cash App pay link — amount optional */
+  function buildCashAppUrl(usdAmount) {
+    let tag = (paymentsConfig().cashAppTag || "").trim().replace(/^\$/, "");
+    if (!tag) return "";
+    const amt = String(usdAmount || "").replace(/[^0-9.]/g, "");
+    // cash.app/$Tag/15 opens payment flow; no need to display the tag in huge text
+    return amt ? `https://cash.app/$${encodeURIComponent(tag)}/${amt}` : `https://cash.app/$${encodeURIComponent(tag)}`;
+  }
+
+  function cashAppTagDisplay() {
+    const tag = (paymentsConfig().cashAppTag || "").trim().replace(/^\$/, "");
+    return tag ? `$${tag}` : "";
   }
 
   function stripeConfigured() {
@@ -353,6 +365,7 @@ const Premium = (() => {
     paymentOptionsConfigured,
     buildPaypalUrl,
     buildCashAppUrl,
+    cashAppTagDisplay,
     paymentsConfig,
     onChange,
     formatExpiry,

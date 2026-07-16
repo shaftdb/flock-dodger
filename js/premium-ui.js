@@ -14,8 +14,12 @@ const PremiumUI = (() => {
     return AppConfig.prices?.[id]?.label || "—";
   }
 
+  function hasPayments() {
+    return Boolean(Premium.paymentOptionsConfigured?.().any);
+  }
+
   function hasCryptoPayments() {
-    return Boolean(Premium.paymentOptionsConfigured?.().crypto);
+    return hasPayments();
   }
 
   function renderFeatureList() {
@@ -49,25 +53,22 @@ const PremiumUI = (() => {
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-sm font-medium">Optional crypto support</p>
+              <p class="text-sm font-medium">Optional support</p>
               ${supporter ? `<span class="badge-unlocked">Thank you</span>` : `<span class="badge-soon">Optional</span>`}
             </div>
-            <p class="text-xs text-flock-muted mt-0.5">Project wallet only (address, not a personal profile). Skip anytime.</p>
+            <p class="text-xs text-flock-muted mt-0.5">Cash App payment link · core stays free · skip anytime</p>
             <div class="mt-2 flex items-center justify-between gap-2">
               <span class="text-[11px] font-mono text-flock-dim">${supporter ? "Unlocked" : priceLabel("supporter") + " once"}</span>
               <button type="button" class="text-[11px] text-flock-accent font-medium" data-open-support>
-                ${supporter ? "Details" : "Crypto support"}
+                ${supporter ? "Details" : "Support"}
               </button>
             </div>
           </div>
         </div>
       </div>`
           : `<div class="premium-card">
-        <p class="text-xs text-flock-muted leading-relaxed">
-          Payments aren’t enabled (keeps your personal accounts private). Use the app free.
-          When you want support later: a <strong class="text-flock-dim">project-only crypto address</strong> is the simplest private option — see Support details.
-        </p>
-        <button type="button" class="mt-2 text-[11px] text-flock-accent font-medium" data-open-support>How support works</button>
+        <p class="text-xs text-flock-muted leading-relaxed">Payments aren’t configured. Use the app free.</p>
+        <button type="button" class="mt-2 text-[11px] text-flock-accent font-medium" data-open-support>About support</button>
       </div>`
       }`;
 
@@ -82,9 +83,12 @@ const PremiumUI = (() => {
     if (buyBundle) {
       buyBundle.hidden = !canPay;
       buyBundle.disabled = supporter;
-      buyBundle.textContent = supporter ? "You're a Supporter" : "Crypto Supporter";
+      buyBundle.textContent = supporter ? "You're a Supporter" : "Cash App support";
     }
-    if (tipBtn) tipBtn.hidden = !canPay;
+    if (tipBtn) {
+      tipBtn.hidden = !canPay;
+      if (!tipBtn.hidden) tipBtn.textContent = "Tip via Cash App";
+    }
 
     const bundlePrice = $("bundle-price");
     if (bundlePrice) bundlePrice.textContent = priceLabel("supporter");
@@ -143,43 +147,39 @@ const PremiumUI = (() => {
             ? `
       <button type="button" id="btn-buy-supporter" class="unlock-option w-full">
         <div class="flex items-start gap-3 text-left">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flock-accent/15 text-flock-accent">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00d632]/12 text-[#00d632]">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Crypto Supporter</p>
-            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} to project wallet · no name on the page</p>
+            <p class="text-sm font-medium">Supporter via Cash App</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} once · opens Cash App payment</p>
           </div>
         </div>
       </button>
       <button type="button" id="btn-buy-tip" class="unlock-option w-full">
         <div class="flex items-start gap-3 text-left">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flock-warn/10 text-flock-warn">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00d632]/12 text-[#00d632]">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Crypto tip</p>
+            <p class="text-sm font-medium">Tip via Cash App</p>
             <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} · optional</p>
           </div>
         </div>
-      </button>`
+      </button>
+      <p class="text-[10px] text-flock-muted leading-relaxed">
+        Knowing a $cashtag only lets someone <em>send you money</em> — not log into your account. Use a strong PIN, biometrics, and 2FA in Cash App.
+      </p>`
             : `
-      <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-3 text-xs text-flock-dim leading-relaxed space-y-2">
-        <p class="font-medium text-flock-text">Easiest private way to get paid later</p>
-        <ol class="list-decimal pl-4 space-y-1.5">
-          <li>Create a <strong class="text-flock-text">separate</strong> crypto wallet only for this project (not your daily wallet).</li>
-          <li>Copy the <strong class="text-flock-text">public receive address</strong> (never the seed phrase).</li>
-          <li>Paste it in <code class="text-flock-muted">js/config.js</code> → <code class="text-flock-muted">payments.crypto.btc</code>.</li>
-        </ol>
-        <p>The site only shows that address — not your real name or personal payment profiles.</p>
-        <p class="text-flock-muted">Personal PayPal / Cash App links on a public site are a privacy risk — left out on purpose.</p>
+      <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-3 text-xs text-flock-dim leading-relaxed">
+        <p>Payments aren’t configured. Use the app free.</p>
       </div>`
       }
 
       <ul class="text-[11px] text-flock-muted space-y-1 leading-relaxed">
         <li>• We never sell route or location data</li>
         <li>• No ad networks</li>
-        <li>• Personal payment apps stay off the public site by design</li>
+        <li>• Core routing stays free forever</li>
       </ul>
 
       <button type="button" class="btn-secondary w-full text-xs" data-close-premium>Close</button>`;
@@ -229,33 +229,71 @@ const PremiumUI = (() => {
     const desc = $("rumble-pay-desc");
     const addrHost = $("rumble-pay-addresses");
     const payButtons = $("pay-buttons");
+    const title = $("rumble-pay-title");
 
     const isTip = rumblePayFeatureId === "tip";
     const usd = String(
       isTip ? p.amounts?.tip || AppConfig.prices?.tip?.amount || "3" : p.amounts?.supporter || "15"
     );
-    const name = isTip ? "Crypto tip" : "Crypto Supporter";
+    const name = isTip ? "Tip" : "Supporter";
+    const cashUrl =
+      typeof Premium.buildCashAppUrl === "function" ? Premium.buildCashAppUrl(usd) : "";
 
+    if (title) title.textContent = "Cash App";
     if (item) item.textContent = name;
-    if (amountEl) amountEl.textContent = `~$${usd}`;
+    if (amountEl) amountEl.textContent = `$${usd}`;
     if (desc) {
       desc.textContent = isTip
-        ? `Send about $${usd} in BTC (or USDT) to the project address below. Optional.`
-        : `Send about $${usd} in BTC (or USDT) to the project address for Supporter on this device.`;
+        ? `Optional tip of about $${usd}. Opens Cash App’s payment screen — you don’t need to hunt for a handle on the page.`
+        : `About $${usd} once via Cash App for Supporter on this device. Tap the green button to open the payment screen.`;
     }
 
-    if (payButtons) payButtons.innerHTML = "";
+    if (payButtons) {
+      payButtons.innerHTML = "";
+      if (cashUrl) {
+        const a = document.createElement("a");
+        a.href = cashUrl;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.className =
+          "btn-primary w-full text-xs text-center font-semibold !bg-[#00d632] !text-black hover:!brightness-110";
+        a.textContent = `Open Cash App · $${usd}`;
+        payButtons.appendChild(a);
+      } else {
+        payButtons.innerHTML = `<p class="text-xs text-flock-warn">Cash App isn’t configured.</p>`;
+      }
+    }
 
+    // Cashtag only behind a small reveal — not big headline text
     if (addrHost) {
       addrHost.innerHTML = "";
-      const btc = (p.crypto?.btc || "").trim();
-      const usdt = (p.crypto?.usdt || "").trim();
-      const net = p.crypto?.usdtNetwork || "";
-      if (!btc && !usdt) {
-        addrHost.innerHTML = `<p class="text-xs text-flock-warn">No project crypto address configured. App stays free-only.</p>`;
-      } else {
-        if (btc) addrHost.appendChild(addressRow("Bitcoin (BTC)", btc));
-        if (usdt) addrHost.appendChild(addressRow(`USDT · ${net || "correct network only"}`, usdt));
+      const tag =
+        typeof Premium.cashAppTagDisplay === "function" ? Premium.cashAppTagDisplay() : "";
+      if (tag) {
+        const details = document.createElement("details");
+        details.className = "text-[11px] text-flock-muted";
+        details.innerHTML = `
+          <summary class="cursor-pointer text-flock-dim hover:text-flock-accent select-none">
+            Prefer to type the tag manually?
+          </summary>
+          <div class="mt-2 flex items-center gap-2 rounded-lg border border-flock-border bg-flock-surface/80 px-2.5 py-2">
+            <code class="flex-1 font-mono text-flock-text text-xs" data-tag></code>
+            <button type="button" class="btn-secondary text-[10px] px-2 py-1" data-copy-tag>Copy</button>
+          </div>
+          <p class="mt-1.5 text-[10px] leading-relaxed">
+            A $cashtag only receives money. It does not grant login access. Protect your Cash App with PIN, biometrics, and 2FA.
+          </p>`;
+        const code = details.querySelector("[data-tag]");
+        if (code) code.textContent = tag;
+        details.querySelector("[data-copy-tag]")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(tag);
+            toast("Copied", "success");
+          } catch {
+            toast("Copy failed — select the tag manually", "error");
+          }
+        });
+        addrHost.appendChild(details);
       }
     }
 
@@ -307,7 +345,7 @@ const PremiumUI = (() => {
       closeRumblePay();
       return;
     }
-    Premium.unlockPermanent(id, "crypto");
+    Premium.unlockPermanent(id, "cashapp");
     closeRumblePay();
     renderFeatureList();
     if (id === "tip") toast("Thank you for the tip!", "success");
