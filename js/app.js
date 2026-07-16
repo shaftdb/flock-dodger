@@ -1672,58 +1672,66 @@
       if (state.start && state.end) runPlan({ preserveVias: false });
     });
 
-    els.btnLocate.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        showToast("Geolocation not supported on this device", "error");
-        return;
-      }
+    els.btnLocate.addEventListener("click", async () => {
       els.btnLocate.classList.add("is-loading");
       setLoading(true, "Getting your location…");
       setLoadingStep("geo");
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            const { latitude: lat, longitude: lng } = pos.coords;
-            const place = await Geocoding.reverse(lat, lng);
-            state.start = place;
-            state.userVias = [];
-            els.startInput.value = place.display_name;
-            clearFieldError("start");
-            focusAreaAround(lat, lng, LOCAL_AREA_RADIUS_MI);
-            setEndpoints(state.start, state.end);
-            updateMapEmpty();
-            showToast("Start set to your location", "success");
-            if (state.end) await runPlan({ preserveVias: false, quiet: true });
-            else await refreshCamerasForView(false);
-          } catch (err) {
-            state.start = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              display_name: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-            };
-            els.startInput.value = state.start.display_name;
-            focusAreaAround(state.start.lat, state.start.lng, LOCAL_AREA_RADIUS_MI);
-            setEndpoints(state.start, state.end);
-            updateMapEmpty();
-            showToast("Start set (address lookup limited)", "success");
-            await refreshCamerasForView(false);
-          } finally {
-            setLoading(false);
-            els.btnLocate.classList.remove("is-loading");
-          }
-        },
-        (err) => {
-          setLoading(false);
-          els.btnLocate.classList.remove("is-loading");
-          let msg = "Location permission denied";
-          if (err.code === 1) msg = "Location permission denied — enable it in browser settings";
-          else if (err.code === 2) msg = "Location unavailable";
-          else if (err.code === 3) msg = "Location request timed out";
-          showToast(msg, "error");
-          showRouteError(msg, false);
-        },
-        { enableHighAccuracy: true, timeout: 12000 }
-      );
+
+      const applyPosition = async (lat, lng) => {
+        state.userVias = [];
+        try {
+          const place = await Geocoding.reverse(lat, lng);
+          state.start = place;
+          els.startInput.value = place.display_name;
+          clearFieldError("start");
+        } catch {
+          state.start = {
+            lat,
+            lng,
+            display_name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            type: "gps",
+          };
+          els.startInput.value = state.start.display_name;
+        }
+        focusAreaAround(lat, lng, LOCAL_AREA_RADIUS_MI);
+        setEndpoints(state.start, state.end);
+        updateMapEmpty();
+        showToast("Start set to your location", "success");
+        if (state.end) await runPlan({ preserveVias: false, quiet: true });
+        else await refreshCamerasForView(false);
+      };
+
+      try {
+        const CapGeo = window.Capacitor?.Plugins?.Geolocation;
+        if (CapGeo?.getCurrentPosition) {
+          const pos = await CapGeo.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 15000,
+          });
+          await applyPosition(pos.coords.latitude, pos.coords.longitude);
+        } else if (navigator.geolocation) {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 12000,
+            });
+          });
+          await applyPosition(pos.coords.latitude, pos.coords.longitude);
+        } else {
+          throw Object.assign(new Error("Geolocation not supported"), { code: 0 });
+        }
+      } catch (err) {
+        let msg = "Location permission denied";
+        if (err?.code === 1) msg = "Location permission denied — enable it in app/browser settings";
+        else if (err?.code === 2) msg = "Location unavailable";
+        else if (err?.code === 3) msg = "Location request timed out";
+        else if (err?.message) msg = err.message;
+        showToast(msg, "error");
+        showRouteError(msg, false);
+      } finally {
+        setLoading(false);
+        els.btnLocate.classList.remove("is-loading");
+      }
     });
 
     window.addEventListener("online", updateOnlineStatus);
