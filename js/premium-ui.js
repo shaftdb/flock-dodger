@@ -125,50 +125,61 @@ const PremiumUI = (() => {
     if (!modal || !body) return;
 
     const supporter = Premium.isSupporter();
+    const canPay = hasCryptoPayments();
     if (title) title.textContent = "Support Flock Dodger";
 
     body.innerHTML = `
       <p class="text-sm text-flock-dim leading-relaxed">
-        Core routing stays <strong class="text-flock-text">free forever</strong> — no ads, no account, no tracking paywall.
-        Optional support funds development of offline packs and better privacy nav.
+        Core routing stays <strong class="text-flock-text">free forever</strong> — no ads, no account, no personal payment profiles.
       </p>
 
       ${
         supporter
           ? `<div class="rounded-xl border border-flock-accent/30 bg-flock-accent/10 px-3 py-3">
               <p class="text-sm font-medium text-flock-accent">You're a Supporter</p>
-              <p class="text-xs text-flock-muted mt-1">Saved on this device. Thank you for keeping the free tier alive for everyone.</p>
+              <p class="text-xs text-flock-muted mt-1">Saved on this device. Thank you.</p>
             </div>`
-          : `
-      <button type="button" id="btn-buy-supporter" class="unlock-option unlock-option--stripe w-full">
+          : canPay
+            ? `
+      <button type="button" id="btn-buy-supporter" class="unlock-option w-full">
         <div class="flex items-start gap-3 text-left">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flock-accent/15 text-flock-accent">
-            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6L12 2z"/></svg>
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Become a Supporter</p>
-            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} via PayPal or Cash App · lifetime on this device</p>
+            <p class="text-sm font-medium">Crypto Supporter</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} to project wallet · no name on the page</p>
           </div>
         </div>
       </button>
-
       <button type="button" id="btn-buy-tip" class="unlock-option w-full">
         <div class="flex items-start gap-3 text-left">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flock-warn/10 text-flock-warn">
-            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg>
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Tip jar</p>
-            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} via PayPal or Cash App · no features, just thanks</p>
+            <p class="text-sm font-medium">Crypto tip</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} · optional</p>
           </div>
         </div>
       </button>`
+            : `
+      <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-3 text-xs text-flock-dim leading-relaxed space-y-2">
+        <p class="font-medium text-flock-text">Easiest private way to get paid later</p>
+        <ol class="list-decimal pl-4 space-y-1.5">
+          <li>Create a <strong class="text-flock-text">separate</strong> crypto wallet only for this project (not your daily wallet).</li>
+          <li>Copy the <strong class="text-flock-text">public receive address</strong> (never the seed phrase).</li>
+          <li>Paste it in <code class="text-flock-muted">js/config.js</code> → <code class="text-flock-muted">payments.crypto.btc</code>.</li>
+        </ol>
+        <p>The site only shows that address — not your real name or personal payment profiles.</p>
+        <p class="text-flock-muted">Personal PayPal / Cash App links on a public site are a privacy risk — left out on purpose.</p>
+      </div>`
       }
 
       <ul class="text-[11px] text-flock-muted space-y-1 leading-relaxed">
         <li>• We never sell route or location data</li>
-        <li>• Pay with PayPal or Cash App if you already use them — no Stripe account</li>
-        <li>• Soft “support us” notes only after a successful route, and rarely</li>
+        <li>• No ad networks</li>
+        <li>• Personal payment apps stay off the public site by design</li>
       </ul>
 
       <button type="button" class="btn-secondary w-full text-xs" data-close-premium>Close</button>`;
