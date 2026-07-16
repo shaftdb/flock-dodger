@@ -1,66 +1,91 @@
 /**
  * Flock Dodger — public configuration
  *
- * Monetization model (see MONETIZATION.md):
- * - Free forever: routing, live OSM cameras, export, reports
- * - Optional one-time Supporter (Stripe)
- * - Optional tip (no unlocks required)
- * - No ads / no tracking ad networks
+ * Payments: Rumble Wallet (crypto tips) — primary.
+ * Stripe remains optional fallback if you ever want cards.
  *
- * Stripe: set publishableKey + paymentLinks OR checkoutApiUrl.
- * Never put your secret key in the browser.
+ * Rumble does NOT offer a card checkout API for external sites.
+ * Supporters send BTC / USDT to your wallet receive address (or tip your
+ * Rumble channel tip jar in the Rumble app).
+ *
+ * Fill in rumble.* below with YOUR details from the Rumble Wallet app:
+ *   Receive → copy BTC / USDT address (correct network!).
  */
 
 const AppConfig = {
-  stripe: {
-    publishableKey: "",
-
-    /** POST { featureId } → { url } — see server/create-checkout.mjs */
-    checkoutApiUrl: "/api/create-checkout-session",
+  /**
+   * ── Rumble Wallet (primary) ─────────────────────────────────────────────
+   * Get addresses: Rumble Wallet app → Receive → choose BTC or USDT + network.
+   * Tip jar: enable on your Rumble channel, then set channelUrl.
+   */
+  rumble: {
+    /** Your Rumble username (display only), e.g. "shaftdb" */
+    username: "shaftdb",
 
     /**
-     * Stripe Payment Links (Dashboard → Payment Links, mode: payment).
-     * Success URL example:
-     *   https://yoursite/index.html?checkout=success&feature=supporter
+     * Link to your channel (tip jar works inside Rumble app / site).
+     * Example: "https://rumble.com/c/YourChannel" or "https://rumble.com/user/shaftdb"
      */
-    paymentLinks: {
-      // supporter: "https://buy.stripe.com/test_xxxxxxxx",
-      // tip: "https://buy.stripe.com/test_xxxxxxxx",
+    channelUrl: "https://rumble.com/user/shaftdb",
+
+    /** Open Wallet download / home */
+    walletUrl: "https://wallet.rumble.com/",
+
+    /**
+     * Crypto receive addresses from Rumble Wallet → Receive.
+     * Leave empty until you paste real addresses — UI will say “add address in config”.
+     * NEVER put seed phrases here — only public receive addresses.
+     */
+    addresses: {
+      /** Bitcoin receive address */
+      btc: "",
+      /**
+       * USDT (Tether) — include network in label so people don’t send on wrong chain.
+       * Example address on Tron/Ethereum/etc. as shown in the wallet.
+       */
+      usdt: "",
+      /** Network note shown under USDT, e.g. "TRC20 (Tron)" or "ERC20" */
+      usdtNetwork: "Check Rumble Wallet for network",
     },
 
-    priceIds: {
-      supporter: "",
-      tip: "",
+    /** Suggested amounts (USD-equivalent; user sends crypto) */
+    amounts: {
+      tip: "3",
+      supporter: "15",
     },
 
-    /** Demo checkout when Stripe is not configured (local testing) */
-    allowDemoCheckout: true,
+    /**
+     * After user taps “I’ve sent payment”, unlock Supporter on this device (honor system).
+     * Fine for a personal tool; not fraud-proof without chain monitoring.
+     */
+    honorUnlock: true,
   },
 
-  /**
-   * Soft support prompts — never block core features.
-   * Shown only after value (e.g. successful route), rarely.
-   */
+  /** Optional Stripe fallback (leave empty to disable card checkout) */
+  stripe: {
+    publishableKey: "",
+    checkoutApiUrl: "",
+    paymentLinks: {},
+    priceIds: {},
+    allowDemoCheckout: false,
+  },
+
   support: {
-    /** Show soft “support the project” after successful routes */
     softPromptEnabled: true,
-    /** Show at most once per N successful route plans (this device) */
     softPromptEveryNRoutes: 8,
-    /** Don’t show again for this many days after dismiss */
-    softPromptCooldownSnoozeDays: 14,
+    softPromptSnoozeDays: 14,
   },
 
-  // Display prices (marketing; real charge is Stripe)
   prices: {
     tip: {
       amount: 3,
       label: "$3",
-      note: "Optional tip — keeps the lights on",
+      note: "Tip via Rumble Wallet (crypto)",
     },
     supporter: {
       amount: 14.99,
-      label: "$14.99",
-      note: "One-time · lifetime Supporter",
+      label: "$15",
+      note: "One-time Supporter via Rumble Wallet",
     },
   },
 

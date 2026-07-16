@@ -21,7 +21,17 @@ Privacy-adjacent products that retain trust (Proton, Mullvad, DeFlock-style tool
 - Avoid **tracking ads**
 - Prefer **transparent paid support** or paid *extras*, not paywalled basics
 
-## Recommended model (what we implement)
+## Payment rail: Rumble Wallet
+
+Rumble Wallet is a **self-custodial crypto wallet** (BTC, USDT, XAUT). Creators receive tips; there is **no Stripe-style card API** for external sites.
+
+**What “route payments to Rumble” means in practice:**
+
+1. You paste **public receive addresses** (or a Rumble channel tip-jar link) into `js/config.js`.
+2. Supporters open **Pay with Rumble Wallet**, copy address / open your channel, send crypto.
+3. They tap **I’ve sent payment** → Supporter unlocks on that device (honor system).
+
+There is no automatic chain watcher in this static app. For a personal tool that’s fine; for scale you’d verify txs later.
 
 ### Free forever (no account, no ads)
 

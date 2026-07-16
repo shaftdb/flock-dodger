@@ -133,7 +133,7 @@ const PremiumUI = (() => {
           </div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">Become a Supporter</p>
-            <p class="text-xs text-flock-muted mt-0.5">One-time ${priceLabel("supporter")} · lifetime on this device · no subscription</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} via Rumble Wallet (BTC/USDT) · lifetime on this device</p>
           </div>
         </div>
       </button>
@@ -145,7 +145,7 @@ const PremiumUI = (() => {
           </div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">Tip jar</p>
-            <p class="text-xs text-flock-muted mt-0.5">${priceLabel("tip")} once · no features, just thanks</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} via Rumble Wallet · no features, just thanks</p>
           </div>
         </div>
       </button>`
@@ -153,7 +153,7 @@ const PremiumUI = (() => {
 
       <ul class="text-[11px] text-flock-muted space-y-1 leading-relaxed">
         <li>• We never sell route or location data</li>
-        <li>• No ad networks or tracking SDKs for monetization</li>
+        <li>• Payments go to Rumble Wallet (crypto) — not card processors by default</li>
         <li>• Soft “support us” notes only after a successful route, and rarely</li>
       </ul>
 
@@ -187,52 +187,139 @@ const PremiumUI = (() => {
   async function beginCheckout(featureId) {
     try {
       const result = await Premium.startCheckout(featureId);
-      if (result.method === "demo") {
-        openStripeDemo(featureId);
+      if (result.method === "rumble") {
+        openRumblePay(result.featureId || featureId);
         return;
+      }
+      if (result.method === "demo") {
+        openRumblePay(featureId);
       }
     } catch (err) {
       toast(err.message || "Checkout failed", "error");
     }
   }
 
-  let demoFeatureId = null;
+  let rumblePayFeatureId = null;
 
-  function openStripeDemo(featureId) {
-    demoFeatureId = featureId;
-    const modal = $("stripe-demo-modal");
-    const item = $("stripe-demo-item");
-    const price = $("stripe-demo-price");
-    const desc = $("stripe-demo-desc");
-    const name =
-      featureId === "tip"
-        ? "Tip the project"
-        : featureId === "supporter" || featureId === "bundle"
-          ? "Flock Dodger Supporter (lifetime)"
-          : Premium.FEATURES[featureId]?.name || featureId;
+  function openRumblePay(featureId) {
+    rumblePayFeatureId = featureId === "bundle" ? "supporter" : featureId;
+    const r = AppConfig.rumble || {};
+    const modal = $("rumble-pay-modal");
+    const item = $("rumble-pay-item");
+    const amountEl = $("rumble-pay-amount");
+    const desc = $("rumble-pay-desc");
+    const addrHost = $("rumble-pay-addresses");
+    const channelLink = $("rumble-channel-link");
+    const walletLink = $("rumble-wallet-link");
+
+    const isTip = rumblePayFeatureId === "tip";
+    const usd = isTip
+      ? r.amounts?.tip || AppConfig.prices?.tip?.amount || "3"
+      : r.amounts?.supporter || AppConfig.prices?.supporter?.amount || "15";
+    const name = isTip ? "Tip the project" : "Flock Dodger Supporter";
 
     if (item) item.textContent = name;
-    if (price) price.textContent = priceLabel(featureId === "bundle" ? "supporter" : featureId);
+    if (amountEl) amountEl.textContent = `~$${usd} USD`;
     if (desc) {
-      desc.textContent = `Demo checkout for “${name}”. No card is charged. Wire Stripe in js/config.js for live payments.`;
+      const who = r.username ? `@${r.username}` : "the developer";
+      desc.textContent = isTip
+        ? `Send a tip to ${who} with Rumble Wallet (BTC or USDT). Optional — no unlock required.`
+        : `Send ~$${usd} in BTC or USDT to ${who} via Rumble Wallet for lifetime Supporter on this device.`;
     }
+
+    if (addrHost) {
+      addrHost.innerHTML = "";
+      const btc = r.addresses?.btc?.trim();
+      const usdt = r.addresses?.usdt?.trim();
+      const net = r.addresses?.usdtNetwork || "See Rumble Wallet";
+
+      if (!btc && !usdt) {
+        addrHost.innerHTML = `
+          <p class="text-flock-warn leading-relaxed">
+            Add your Rumble Wallet <strong>receive addresses</strong> in
+            <code class="text-flock-dim">js/config.js</code> → <code class="text-flock-dim">rumble.addresses</code>
+            (Wallet app → Receive). Or tip via the channel link if your tip jar is enabled.
+          </p>`;
+      } else {
+        if (btc) {
+          addrHost.appendChild(addressRow("Bitcoin (BTC)", btc));
+        }
+        if (usdt) {
+          addrHost.appendChild(addressRow(`USDT · ${net}`, usdt));
+        }
+      }
+    }
+
+    if (channelLink) {
+      if (r.channelUrl) {
+        channelLink.href = r.channelUrl;
+        channelLink.hidden = false;
+        channelLink.textContent = r.username
+          ? `Open @${r.username} on Rumble (tip jar)`
+          : "Open Rumble channel / tip jar";
+      } else {
+        channelLink.hidden = true;
+      }
+    }
+    if (walletLink) {
+      walletLink.href = r.walletUrl || "https://wallet.rumble.com/";
+    }
+
     if (modal) modal.hidden = false;
   }
 
-  function closeStripeDemo() {
-    const modal = $("stripe-demo-modal");
-    if (modal) modal.hidden = true;
-    demoFeatureId = null;
+  function addressRow(label, address) {
+    const wrap = document.createElement("div");
+    wrap.className = "rounded-lg border border-flock-border bg-flock-surface/80 px-2.5 py-2";
+    wrap.innerHTML = `
+      <p class="text-[10px] uppercase tracking-wide text-flock-muted font-semibold mb-1">${escapeHtml(label)}</p>
+      <div class="flex items-start gap-2">
+        <code class="flex-1 min-w-0 break-all text-[11px] text-flock-text font-mono leading-snug">${escapeHtml(
+          address
+        )}</code>
+        <button type="button" class="btn-secondary text-[10px] px-2 py-1 shrink-0" data-copy>Copy</button>
+      </div>`;
+    wrap.querySelector("[data-copy]")?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(address);
+        toast("Address copied", "success");
+      } catch {
+        toast("Could not copy — select and copy manually", "error");
+      }
+    });
+    return wrap;
   }
 
-  function confirmStripeDemo() {
-    if (!demoFeatureId) return;
-    const id = demoFeatureId;
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function closeRumblePay() {
+    const modal = $("rumble-pay-modal");
+    if (modal) modal.hidden = true;
+    rumblePayFeatureId = null;
+  }
+
+  function confirmRumblePaid() {
+    if (!rumblePayFeatureId) return;
+    const id = rumblePayFeatureId;
+    const honor = AppConfig.rumble?.honorUnlock !== false;
+    if (!honor && id === "supporter") {
+      toast("Thanks — unlock will be applied after payment is confirmed manually", "success");
+      closeRumblePay();
+      return;
+    }
     Premium.completeDemoPurchase(id);
-    closeStripeDemo();
+    // Tag method as rumble
+    Premium.unlockPermanent(id, "rumble_wallet");
+    closeRumblePay();
     renderFeatureList();
-    if (id === "tip") toast("Thanks for the tip (demo)", "success");
-    else toast("You're a Supporter — thank you (demo)", "success");
+    if (id === "tip") toast("Thank you for the Rumble tip!", "success");
+    else toast("Supporter unlocked — thank you via Rumble Wallet!", "success");
   }
 
   function maybeSoftPrompt() {
@@ -264,10 +351,10 @@ const PremiumUI = (() => {
     document.querySelectorAll("[data-close-premium]").forEach((el) => {
       el.addEventListener("click", closePremiumModal);
     });
-    document.querySelectorAll("[data-close-stripe-demo]").forEach((el) => {
-      el.addEventListener("click", closeStripeDemo);
+    document.querySelectorAll("[data-close-rumble-pay]").forEach((el) => {
+      el.addEventListener("click", closeRumblePay);
     });
-    $("btn-stripe-demo-pay")?.addEventListener("click", confirmStripeDemo);
+    $("btn-rumble-paid")?.addEventListener("click", confirmRumblePaid);
 
     $("btn-soft-support")?.addEventListener("click", () => {
       hideSoftPrompt(true);
@@ -278,7 +365,7 @@ const PremiumUI = (() => {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         closePremiumModal();
-        closeStripeDemo();
+        closeRumblePay();
         hideSoftPrompt(false);
       }
     });

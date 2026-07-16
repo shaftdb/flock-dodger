@@ -159,6 +159,18 @@ const Premium = (() => {
     return Promise.reject(new Error("Ads are disabled on Flock Dodger."));
   }
 
+  function rumbleConfigured() {
+    const r = AppConfig.rumble || {};
+    const hasAddr = Boolean(r.addresses?.btc || r.addresses?.usdt);
+    const hasChannel = Boolean(r.channelUrl);
+    return {
+      hasAddr,
+      hasChannel,
+      username: r.username || "",
+      any: hasAddr || hasChannel || Boolean(r.walletUrl),
+    };
+  }
+
   function stripeConfigured() {
     const s = AppConfig.stripe || {};
     const hasLinks = s.paymentLinks && Object.values(s.paymentLinks).some(Boolean);
@@ -179,10 +191,19 @@ const Premium = (() => {
     )}`;
   }
 
+  /**
+   * Start support payment. Prefers Rumble Wallet; Stripe only if configured.
+   */
   async function startCheckout(featureId) {
-    const s = AppConfig.stripe || {};
     const id = featureId === "bundle" ? "supporter" : featureId;
 
+    // Primary: Rumble Wallet crypto / tip jar
+    if (rumbleConfigured().any) {
+      return { method: "rumble", featureId: id };
+    }
+
+    // Optional Stripe fallback
+    const s = AppConfig.stripe || {};
     const link = s.paymentLinks?.[id];
     if (link) {
       sessionStorage.setItem("fd-pending-checkout", id);
@@ -208,27 +229,14 @@ const Premium = (() => {
             window.location.href = data.url;
             return { method: "checkout_session", sessionId: data.id };
           }
-          if (data.id && s.publishableKey && window.Stripe) {
-            sessionStorage.setItem("fd-pending-checkout", id);
-            const stripe = window.Stripe(s.publishableKey);
-            const { error } = await stripe.redirectToCheckout({ sessionId: data.id });
-            if (error) throw new Error(error.message);
-            return { method: "checkout_session", sessionId: data.id };
-          }
-        } else if (!s.allowDemoCheckout) {
-          throw new Error("Checkout service unavailable.");
         }
       } catch (err) {
-        if (!s.allowDemoCheckout) throw err;
-        console.warn("[Premium] Checkout API failed", err);
+        console.warn("[Premium] Stripe fallback failed", err);
       }
     }
 
-    if (s.allowDemoCheckout) {
-      return { method: "demo", featureId: id };
-    }
-
-    throw new Error("Stripe is not configured. Add paymentLinks in js/config.js.");
+    // Still open Rumble UI with empty-address instructions
+    return { method: "rumble", featureId: id };
   }
 
   function handleCheckoutReturn() {
@@ -367,6 +375,7 @@ const Premium = (() => {
     handleCheckoutReturn,
     completeDemoPurchase,
     stripeConfigured,
+    rumbleConfigured,
     onChange,
     formatExpiry,
     listFeatures,
