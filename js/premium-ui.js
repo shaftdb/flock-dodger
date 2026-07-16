@@ -133,7 +133,7 @@ const PremiumUI = (() => {
           </div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">Become a Supporter</p>
-            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} via Rumble Wallet (BTC/USDT) · lifetime on this device</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("supporter")} via PayPal or Cash App · lifetime on this device</p>
           </div>
         </div>
       </button>
@@ -145,7 +145,7 @@ const PremiumUI = (() => {
           </div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">Tip jar</p>
-            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} via Rumble Wallet · no features, just thanks</p>
+            <p class="text-xs text-flock-muted mt-0.5">~${priceLabel("tip")} via PayPal or Cash App · no features, just thanks</p>
           </div>
         </div>
       </button>`
@@ -153,7 +153,7 @@ const PremiumUI = (() => {
 
       <ul class="text-[11px] text-flock-muted space-y-1 leading-relaxed">
         <li>• We never sell route or location data</li>
-        <li>• Payments go to Rumble Wallet (crypto) — not card processors by default</li>
+        <li>• Pay with PayPal or Cash App if you already use them — no Stripe account</li>
         <li>• Soft “support us” notes only after a successful route, and rarely</li>
       </ul>
 
@@ -187,13 +187,7 @@ const PremiumUI = (() => {
   async function beginCheckout(featureId) {
     try {
       const result = await Premium.startCheckout(featureId);
-      if (result.method === "rumble") {
-        openRumblePay(result.featureId || featureId);
-        return;
-      }
-      if (result.method === "demo") {
-        openRumblePay(featureId);
-      }
+      openSimplePay(result.featureId || featureId);
     } catch (err) {
       toast(err.message || "Checkout failed", "error");
     }
@@ -201,71 +195,88 @@ const PremiumUI = (() => {
 
   let rumblePayFeatureId = null;
 
-  function openRumblePay(featureId) {
+  function openSimplePay(featureId) {
     rumblePayFeatureId = featureId === "bundle" ? "supporter" : featureId;
-    const r = AppConfig.rumble || {};
+    const p = typeof Premium.paymentsConfig === "function" ? Premium.paymentsConfig() : AppConfig.payments || {};
     const modal = $("rumble-pay-modal");
     const item = $("rumble-pay-item");
     const amountEl = $("rumble-pay-amount");
     const desc = $("rumble-pay-desc");
     const addrHost = $("rumble-pay-addresses");
-    const channelLink = $("rumble-channel-link");
-    const walletLink = $("rumble-wallet-link");
+    const payButtons = $("pay-buttons");
 
     const isTip = rumblePayFeatureId === "tip";
-    const usd = isTip
-      ? r.amounts?.tip || AppConfig.prices?.tip?.amount || "3"
-      : r.amounts?.supporter || AppConfig.prices?.supporter?.amount || "15";
+    const usd = String(
+      isTip ? p.amounts?.tip || AppConfig.prices?.tip?.amount || "3" : p.amounts?.supporter || "15"
+    );
     const name = isTip ? "Tip the project" : "Flock Dodger Supporter";
 
     if (item) item.textContent = name;
-    if (amountEl) amountEl.textContent = `~$${usd} USD`;
+    if (amountEl) amountEl.textContent = `$${usd}`;
     if (desc) {
-      const who = r.username ? `@${r.username}` : "the developer";
       desc.textContent = isTip
-        ? `Send a tip to ${who} with Rumble Wallet (BTC or USDT). Optional — no unlock required.`
-        : `Send ~$${usd} in BTC or USDT to ${who} via Rumble Wallet for lifetime Supporter on this device.`;
+        ? `Send about $${usd} with PayPal or Cash App if you already use them. Optional — no unlock required.`
+        : `Send about $${usd} once with PayPal or Cash App for Supporter on this device. No Stripe setup.`;
+    }
+
+    if (payButtons) {
+      payButtons.innerHTML = "";
+      const paypalUrl =
+        typeof Premium.buildPaypalUrl === "function" ? Premium.buildPaypalUrl(usd) : "";
+      const cashUrl =
+        typeof Premium.buildCashAppUrl === "function" ? Premium.buildCashAppUrl(usd) : "";
+      const rumbleUrl = (p.rumbleChannelUrl || AppConfig.rumble?.channelUrl || "").trim();
+
+      if (paypalUrl) {
+        payButtons.appendChild(
+          payLinkButton("Pay with PayPal", paypalUrl, "bg-[#0070ba]/15 text-[#5eb1f7]")
+        );
+      }
+      if (cashUrl) {
+        payButtons.appendChild(
+          payLinkButton("Pay with Cash App", cashUrl, "bg-[#00d632]/12 text-[#00d632]")
+        );
+      }
+      if (rumbleUrl) {
+        payButtons.appendChild(
+          payLinkButton("Tip on Rumble", rumbleUrl, "bg-emerald-500/12 text-emerald-400")
+        );
+      }
+
+      if (!paypalUrl && !cashUrl && !rumbleUrl) {
+        payButtons.innerHTML = `
+          <p class="text-xs text-flock-warn leading-relaxed">
+            Add your PayPal.me or Cash App $cashtag in
+            <code class="text-flock-dim">js/config.js</code> under
+            <code class="text-flock-dim">payments.paypalMe</code> or
+            <code class="text-flock-dim">payments.cashAppTag</code>.
+          </p>
+          <p class="text-[11px] text-flock-muted leading-relaxed">
+            Example: paypalMe: "https://paypal.me/YourName" · cashAppTag: "YourTag"
+          </p>`;
+      }
     }
 
     if (addrHost) {
       addrHost.innerHTML = "";
-      const btc = r.addresses?.btc?.trim();
-      const usdt = r.addresses?.usdt?.trim();
-      const net = r.addresses?.usdtNetwork || "See Rumble Wallet";
-
-      if (!btc && !usdt) {
-        addrHost.innerHTML = `
-          <p class="text-flock-warn leading-relaxed">
-            Add your Rumble Wallet <strong>receive addresses</strong> in
-            <code class="text-flock-dim">js/config.js</code> → <code class="text-flock-dim">rumble.addresses</code>
-            (Wallet app → Receive). Or tip via the channel link if your tip jar is enabled.
-          </p>`;
-      } else {
-        if (btc) {
-          addrHost.appendChild(addressRow("Bitcoin (BTC)", btc));
-        }
-        if (usdt) {
-          addrHost.appendChild(addressRow(`USDT · ${net}`, usdt));
-        }
-      }
-    }
-
-    if (channelLink) {
-      if (r.channelUrl) {
-        channelLink.href = r.channelUrl;
-        channelLink.hidden = false;
-        channelLink.textContent = r.username
-          ? `Open @${r.username} on Rumble (tip jar)`
-          : "Open Rumble channel / tip jar";
-      } else {
-        channelLink.hidden = true;
-      }
-    }
-    if (walletLink) {
-      walletLink.href = r.walletUrl || "https://wallet.rumble.com/";
+      const btc = (p.crypto?.btc || AppConfig.rumble?.addresses?.btc || "").trim();
+      const usdt = (p.crypto?.usdt || AppConfig.rumble?.addresses?.usdt || "").trim();
+      const net = p.crypto?.usdtNetwork || AppConfig.rumble?.addresses?.usdtNetwork || "";
+      if (btc) addrHost.appendChild(addressRow("Bitcoin (optional)", btc));
+      if (usdt) addrHost.appendChild(addressRow(`USDT optional · ${net || "check network"}`, usdt));
     }
 
     if (modal) modal.hidden = false;
+  }
+
+  function payLinkButton(label, href, colorClass) {
+    const a = document.createElement("a");
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.className = `btn-secondary w-full text-xs text-center font-semibold ${colorClass || ""}`;
+    a.textContent = label;
+    return a;
   }
 
   function addressRow(label, address) {
@@ -307,19 +318,17 @@ const PremiumUI = (() => {
   function confirmRumblePaid() {
     if (!rumblePayFeatureId) return;
     const id = rumblePayFeatureId;
-    const honor = AppConfig.rumble?.honorUnlock !== false;
+    const honor = AppConfig.payments?.honorUnlock !== false;
     if (!honor && id === "supporter") {
-      toast("Thanks — unlock will be applied after payment is confirmed manually", "success");
+      toast("Thanks — unlock after you confirm payment manually", "success");
       closeRumblePay();
       return;
     }
-    Premium.completeDemoPurchase(id);
-    // Tag method as rumble
-    Premium.unlockPermanent(id, "rumble_wallet");
+    Premium.unlockPermanent(id, "paypal_cashapp");
     closeRumblePay();
     renderFeatureList();
-    if (id === "tip") toast("Thank you for the Rumble tip!", "success");
-    else toast("Supporter unlocked — thank you via Rumble Wallet!", "success");
+    if (id === "tip") toast("Thank you for the tip!", "success");
+    else toast("Supporter unlocked — thank you!", "success");
   }
 
   function maybeSoftPrompt() {

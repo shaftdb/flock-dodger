@@ -416,7 +416,7 @@
                 </div>
                 <div class="text-right shrink-0">
                   <p id="bundle-price" class="text-sm font-mono text-flock-accent font-semibold">$14.99</p>
-                  <button type="button" id="btn-buy-bundle" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">Pay via Rumble</button>
+                  <button type="button" id="btn-buy-bundle" class="mt-1 text-[11px] font-medium text-flock-accent hover:underline">PayPal / Cash App</button>
                 </div>
               </div>
               <div class="flex items-center justify-between gap-2 border-t border-flock-border pt-2">
@@ -642,15 +642,17 @@
     </div>
   </div>
 
-  <!-- Rumble Wallet payment modal -->
+  <!-- Simple payment modal (PayPal / Cash App / optional extras) -->
   <div id="rumble-pay-modal" class="modal" hidden>
     <div class="modal-backdrop" data-close-rumble-pay></div>
     <div class="modal-panel max-w-md" role="dialog" aria-modal="true" aria-labelledby="rumble-pay-title">
       <div class="flex items-center gap-2 mb-3">
-        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 font-bold text-xs">RW</div>
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-flock-accent/15 text-flock-accent">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
         <div class="min-w-0">
-          <h2 id="rumble-pay-title" class="text-base font-semibold">Pay with Rumble Wallet</h2>
-          <p class="text-[11px] text-flock-muted">Crypto tips · BTC / USDT</p>
+          <h2 id="rumble-pay-title" class="text-base font-semibold">Send support</h2>
+          <p class="text-[11px] text-flock-muted">PayPal or Cash App — no new accounts needed</p>
         </div>
         <button type="button" class="btn-icon ml-auto" data-close-rumble-pay aria-label="Close">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -658,20 +660,19 @@
       </div>
       <p id="rumble-pay-desc" class="text-sm text-flock-dim mb-3 leading-relaxed"></p>
       <div class="rounded-xl border border-flock-border bg-flock-bg px-3 py-3 mb-3">
-        <div class="flex justify-between text-sm mb-2">
+        <div class="flex justify-between text-sm mb-3">
           <span id="rumble-pay-item" class="font-medium">Support</span>
           <span id="rumble-pay-amount" class="font-mono text-flock-accent font-semibold">$15</span>
         </div>
-        <div id="rumble-pay-addresses" class="space-y-2 text-xs"></div>
+        <div id="pay-buttons" class="flex flex-col gap-2"></div>
+        <div id="rumble-pay-addresses" class="space-y-2 text-xs mt-2"></div>
       </div>
       <div class="flex flex-col gap-2">
-        <a id="rumble-channel-link" href="#" target="_blank" rel="noopener" class="btn-secondary w-full text-xs text-center">Open my Rumble channel / tip jar</a>
-        <a id="rumble-wallet-link" href="https://wallet.rumble.com/" target="_blank" rel="noopener" class="btn-secondary w-full text-xs text-center">Get Rumble Wallet</a>
         <button type="button" id="btn-rumble-paid" class="btn-primary w-full text-xs">I’ve sent payment</button>
         <button type="button" class="btn-secondary w-full text-xs" data-close-rumble-pay>Cancel</button>
       </div>
       <p class="text-[10px] text-flock-muted mt-3 leading-relaxed">
-        Send only on the network shown. Wrong network = lost funds. Unlock is honor-based on this device after you confirm.
+        Opens PayPal or Cash App in a new tab. After you pay, tap “I’ve sent payment” to unlock Supporter on this device.
       </p>
     </div>
   </div>

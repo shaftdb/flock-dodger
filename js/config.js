@@ -1,67 +1,70 @@
 /**
  * Flock Dodger — public configuration
  *
- * Payments: Rumble Wallet (crypto tips) — primary.
- * Stripe remains optional fallback if you ever want cards.
+ * Payments (easiest first):
+ *   1. PayPal.me  — if you already have PayPal
+ *   2. Cash App   — if you already have Cash App ($cashtag)
+ *   3. Rumble     — optional crypto (more friction)
  *
- * Rumble does NOT offer a card checkout API for external sites.
- * Supporters send BTC / USDT to your wallet receive address (or tip your
- * Rumble channel tip jar in the Rumble app).
- *
- * Fill in rumble.* below with YOUR details from the Rumble Wallet app:
- *   Receive → copy BTC / USDT address (correct network!).
+ * No new merchant account required beyond an app you already use.
+ * Paste your links below. Leave blank to hide that option.
  */
 
 const AppConfig = {
   /**
-   * ── Rumble Wallet (primary) ─────────────────────────────────────────────
-   * Get addresses: Rumble Wallet app → Receive → choose BTC or USDT + network.
-   * Tip jar: enable on your Rumble channel, then set channelUrl.
+   * Support payments — fill any you already use.
+   * Suggested amounts are embedded in the URL when possible.
    */
-  rumble: {
-    /** Your Rumble username (display only), e.g. "shaftdb" */
-    username: "shaftdb",
+  payments: {
+    /**
+     * PayPal.me — create at https://www.paypal.com/paypalme (free if you have PayPal)
+     * Examples:
+     *   "https://paypal.me/YourName"
+     *   "https://paypal.me/YourName/15"  (pre-fills $15)
+     */
+    paypalMe: "",
 
     /**
-     * Link to your channel (tip jar works inside Rumble app / site).
-     * Example: "https://rumble.com/c/YourChannel" or "https://rumble.com/user/shaftdb"
+     * Cash App — your $cashtag only (no $), e.g. "YourTag"
+     * Opens: https://cash.app/$YourTag/15
+     * You must already have Cash App; no separate merchant signup.
      */
-    channelUrl: "https://rumble.com/user/shaftdb",
+    cashAppTag: "",
 
-    /** Open Wallet download / home */
-    walletUrl: "https://wallet.rumble.com/",
+    /** Optional Rumble channel for tip jar (leave empty to hide) */
+    rumbleChannelUrl: "",
+    rumbleUsername: "",
 
-    /**
-     * Crypto receive addresses from Rumble Wallet → Receive.
-     * Leave empty until you paste real addresses — UI will say “add address in config”.
-     * NEVER put seed phrases here — only public receive addresses.
-     */
-    addresses: {
-      /** Bitcoin receive address */
+    /** Optional crypto receive addresses (advanced; leave empty to hide) */
+    crypto: {
       btc: "",
-      /**
-       * USDT (Tether) — include network in label so people don’t send on wrong chain.
-       * Example address on Tron/Ethereum/etc. as shown in the wallet.
-       */
       usdt: "",
-      /** Network note shown under USDT, e.g. "TRC20 (Tron)" or "ERC20" */
-      usdtNetwork: "Check Rumble Wallet for network",
+      usdtNetwork: "",
     },
 
-    /** Suggested amounts (USD-equivalent; user sends crypto) */
+    /** USD amounts shown / appended to payment links */
     amounts: {
       tip: "3",
       supporter: "15",
     },
 
     /**
-     * After user taps “I’ve sent payment”, unlock Supporter on this device (honor system).
-     * Fine for a personal tool; not fraud-proof without chain monitoring.
+     * After “I’ve sent payment”, unlock Supporter on this device.
+     * Honor system — fine for a personal tool.
      */
     honorUnlock: true,
   },
 
-  /** Optional Stripe fallback (leave empty to disable card checkout) */
+  /** Legacy key — UI still reads AppConfig.rumble if present */
+  rumble: {
+    username: "",
+    channelUrl: "",
+    walletUrl: "https://wallet.rumble.com/",
+    addresses: { btc: "", usdt: "", usdtNetwork: "" },
+    amounts: { tip: "3", supporter: "15" },
+    honorUnlock: true,
+  },
+
   stripe: {
     publishableKey: "",
     checkoutApiUrl: "",
@@ -77,16 +80,8 @@ const AppConfig = {
   },
 
   prices: {
-    tip: {
-      amount: 3,
-      label: "$3",
-      note: "Tip via Rumble Wallet (crypto)",
-    },
-    supporter: {
-      amount: 14.99,
-      label: "$15",
-      note: "One-time Supporter via Rumble Wallet",
-    },
+    tip: { amount: 3, label: "$3", note: "Tip via PayPal or Cash App" },
+    supporter: { amount: 15, label: "$15", note: "One-time Supporter" },
   },
 
   cameras: {
@@ -94,3 +89,19 @@ const AppConfig = {
     useCommunityReports: true,
   },
 };
+
+// Keep rumble.* in sync with payments for older code paths
+(function syncRumbleFromPayments() {
+  const p = AppConfig.payments;
+  if (!p) return;
+  AppConfig.rumble = AppConfig.rumble || {};
+  if (p.rumbleUsername) AppConfig.rumble.username = p.rumbleUsername;
+  if (p.rumbleChannelUrl) AppConfig.rumble.channelUrl = p.rumbleChannelUrl;
+  AppConfig.rumble.amounts = p.amounts || AppConfig.rumble.amounts;
+  AppConfig.rumble.addresses = {
+    btc: p.crypto?.btc || "",
+    usdt: p.crypto?.usdt || "",
+    usdtNetwork: p.crypto?.usdtNetwork || "",
+  };
+  AppConfig.rumble.honorUnlock = p.honorUnlock !== false;
+})();

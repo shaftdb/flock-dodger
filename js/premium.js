@@ -159,15 +159,56 @@ const Premium = (() => {
     return Promise.reject(new Error("Ads are disabled on Flock Dodger."));
   }
 
-  function rumbleConfigured() {
+  function paymentsConfig() {
+    return AppConfig.payments || {};
+  }
+
+  function buildPaypalUrl(usdAmount) {
+    const raw = (paymentsConfig().paypalMe || "").trim();
+    if (!raw) return "";
+    // Accept full URL or bare username
+    let base = raw;
+    if (!/^https?:\/\//i.test(base)) {
+      base = `https://paypal.me/${base.replace(/^\/+/, "")}`;
+    }
+    base = base.replace(/\/+$/, "");
+    // If URL already ends with /amount, leave it; else append suggested amount
+    if (/\/\d+(\.\d+)?$/.test(base)) return base;
+    const amt = String(usdAmount || "").replace(/[^0-9.]/g, "");
+    return amt ? `${base}/${amt}` : base;
+  }
+
+  function buildCashAppUrl(usdAmount) {
+    let tag = (paymentsConfig().cashAppTag || "").trim();
+    if (!tag) return "";
+    tag = tag.replace(/^\$/, "");
+    const amt = String(usdAmount || "").replace(/[^0-9.]/g, "");
+    return amt ? `https://cash.app/$${tag}/${amt}` : `https://cash.app/$${tag}`;
+  }
+
+  function paymentOptionsConfigured() {
+    const p = paymentsConfig();
     const r = AppConfig.rumble || {};
-    const hasAddr = Boolean(r.addresses?.btc || r.addresses?.usdt);
-    const hasChannel = Boolean(r.channelUrl);
     return {
-      hasAddr,
-      hasChannel,
-      username: r.username || "",
-      any: hasAddr || hasChannel || Boolean(r.walletUrl),
+      paypal: Boolean((p.paypalMe || "").trim()),
+      cashApp: Boolean((p.cashAppTag || "").trim()),
+      rumble: Boolean((p.rumbleChannelUrl || r.channelUrl || "").trim()),
+      crypto: Boolean(p.crypto?.btc || p.crypto?.usdt || r.addresses?.btc || r.addresses?.usdt),
+      any:
+        Boolean((p.paypalMe || "").trim()) ||
+        Boolean((p.cashAppTag || "").trim()) ||
+        Boolean((p.rumbleChannelUrl || r.channelUrl || "").trim()) ||
+        Boolean(p.crypto?.btc || p.crypto?.usdt || r.addresses?.btc || r.addresses?.usdt),
+    };
+  }
+
+  function rumbleConfigured() {
+    const opts = paymentOptionsConfigured();
+    return {
+      hasAddr: opts.crypto,
+      hasChannel: opts.rumble,
+      username: paymentsConfig().rumbleUsername || AppConfig.rumble?.username || "",
+      any: opts.any,
     };
   }
 
@@ -192,51 +233,11 @@ const Premium = (() => {
   }
 
   /**
-   * Start support payment. Prefers Rumble Wallet; Stripe only if configured.
+   * Start support payment. Opens simple PayPal / Cash App / Rumble chooser.
    */
   async function startCheckout(featureId) {
     const id = featureId === "bundle" ? "supporter" : featureId;
-
-    // Primary: Rumble Wallet crypto / tip jar
-    if (rumbleConfigured().any) {
-      return { method: "rumble", featureId: id };
-    }
-
-    // Optional Stripe fallback
-    const s = AppConfig.stripe || {};
-    const link = s.paymentLinks?.[id];
-    if (link) {
-      sessionStorage.setItem("fd-pending-checkout", id);
-      window.location.href = link;
-      return { method: "payment_link" };
-    }
-
-    if (s.checkoutApiUrl) {
-      try {
-        const res = await fetch(s.checkoutApiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            featureId: id,
-            successUrl: successUrl(id),
-            cancelUrl: cancelUrl(id),
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.url) {
-            sessionStorage.setItem("fd-pending-checkout", id);
-            window.location.href = data.url;
-            return { method: "checkout_session", sessionId: data.id };
-          }
-        }
-      } catch (err) {
-        console.warn("[Premium] Stripe fallback failed", err);
-      }
-    }
-
-    // Still open Rumble UI with empty-address instructions
-    return { method: "rumble", featureId: id };
+    return { method: "simple_pay", featureId: id };
   }
 
   function handleCheckoutReturn() {
@@ -376,6 +377,10 @@ const Premium = (() => {
     completeDemoPurchase,
     stripeConfigured,
     rumbleConfigured,
+    paymentOptionsConfigured,
+    buildPaypalUrl,
+    buildCashAppUrl,
+    paymentsConfig,
     onChange,
     formatExpiry,
     listFeatures,
