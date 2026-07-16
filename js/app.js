@@ -139,7 +139,11 @@
 
   // ---------- Map focus (auto area / route) ----------
   /** Default local area radius in miles (mid of ~25–50 mi) */
-  const LOCAL_AREA_RADIUS_MI = 35;
+  const LOCAL_AREA_RADIUS_MI = 30;
+  /** Hard cap: Leaflet DOM markers blow up mobile memory above a few hundred */
+  const MAX_MAP_MARKERS = 350;
+  const MAX_ROUTE_CAMERAS = 500;
+  const MAX_BUFFER_CIRCLES = 80;
 
   function milesToLatDelta(miles) {
     return miles / 69.0;
@@ -290,6 +294,7 @@
     state.map = L.map("map", {
       zoomControl: false,
       attributionControl: true,
+      preferCanvas: true, // polylines/circles use canvas — much less memory on mobile
     }).setView([startLat, startLng], startZoom);
 
     L.control.zoom({ position: "bottomright" }).addTo(state.map);
@@ -441,20 +446,29 @@
     els.osmStatus.textContent = "Live data idle — pan the map or plan a route to load cameras.";
   }
 
+  function clampCorridorBounds(bounds) {
+    if (typeof OverpassCameras !== "undefined" && OverpassCameras.clampBounds) {
+      return OverpassCameras.clampBounds(bounds);
+    }
+    return bounds;
+  }
+
   /**
    * Collect cameras for routing/map: live OSM + optional mock + community.
+   * Hard-capped for mobile memory.
    * @param {object} bounds
-   * @param {{forceLive?: boolean, signal?: AbortSignal}} [opts]
+   * @param {{forceLive?: boolean, signal?: AbortSignal, forRouting?: boolean}} [opts]
    */
   async function collectCameras(bounds, opts = {}) {
     const parts = [];
+    const safeBounds = clampCorridorBounds(bounds);
 
     if (state.useLiveOsm && typeof OverpassCameras !== "undefined") {
       try {
-        const live = await OverpassCameras.fetchInBounds(bounds, {
+        const live = await OverpassCameras.fetchInBounds(safeBounds, {
           force: opts.forceLive,
           signal: opts.signal,
-          pad: 0.03,
+          pad: 0.012,
         });
         state.lastOsmCameras = live;
         parts.push(...live);
@@ -468,14 +482,14 @@
     }
 
     if (state.useMockData) {
-      parts.push(...CameraData.getCamerasInBounds(bounds));
+      // Density 6 keeps procedural fill tiny
+      parts.push(...CameraData.getCamerasInBounds(safeBounds, 6));
     }
 
     if (state.showCommunity) {
-      parts.push(...Storage.reportsAsCameras(bounds));
+      parts.push(...Storage.reportsAsCameras(safeBounds));
     }
 
-    // Dedupe by rounded lat/lng (prefer live/community over mock)
     const rank = (c) => {
       if (c.community || c.source === "community") return 0;
       if (c.live || c.source === "openstreetmap") return 1;
@@ -484,15 +498,16 @@
     parts.sort((a, b) => rank(a) - rank(b));
     const seen = new Set();
     const out = [];
+    const cap = opts.forRouting ? MAX_ROUTE_CAMERAS : MAX_MAP_MARKERS;
     for (const c of parts) {
       const key = c.id || `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
       if (seen.has(key)) continue;
-      // Also dedupe near-identical coordinates from mock vs OSM
       const geo = `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`;
       if (seen.has(geo)) continue;
       seen.add(key);
       seen.add(geo);
       out.push(c);
+      if (out.length >= cap) break;
     }
     return out;
   }
@@ -525,25 +540,47 @@
 
   function cameraIcon(nearRoute, cam) {
     const community = cam?.community || cam?.source === "community";
-    const mock = cam?.source === "procedural-demo" || cam?.source === "mock-corridor" || cam?.source === "corridor-mock" || cam?.source === "placeholder" || cam?.source === "community-pattern";
+    const mock =
+      cam?.source === "procedural-demo" ||
+      cam?.source === "mock-corridor" ||
+      cam?.source === "corridor-mock" ||
+      cam?.source === "placeholder" ||
+      cam?.source === "community-pattern";
     const cls = [
       "camera-marker",
+      "camera-marker--lite",
       nearRoute ? "near-route" : "",
       community ? "community" : "",
       mock && !community ? "mock" : "",
     ]
       .filter(Boolean)
       .join(" ");
-    const title = community ? "Your report" : cam?.live || cam?.source === "openstreetmap" ? "OSM ALPR" : "Demo camera";
+    // Minimal DOM — full SVG icons were a major mobile memory cost at scale
     return L.divIcon({
       className: "",
-      html: `<div class="${cls}" title="${title}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      </div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-      popupAnchor: [0, -14],
+      html: `<div class="${cls}"></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+      popupAnchor: [0, -8],
     });
+  }
+
+  /** Prefer near-route / community cameras when we must drop markers */
+  function prioritizeCamerasForDisplay(cameras, highlightIds) {
+    if (!cameras || cameras.length <= MAX_MAP_MARKERS) return cameras || [];
+    const hi = highlightIds || new Set();
+    const ranked = cameras.slice().sort((a, b) => {
+      const sa =
+        (hi.has(a.id) ? 0 : 2) +
+        (a.community || a.source === "community" ? 0 : 1) +
+        (a.live || a.source === "openstreetmap" ? 0 : 1);
+      const sb =
+        (hi.has(b.id) ? 0 : 2) +
+        (b.community || b.source === "community" ? 0 : 1) +
+        (b.live || b.source === "openstreetmap" ? 0 : 1);
+      return sa - sb;
+    });
+    return ranked.slice(0, MAX_MAP_MARKERS);
   }
 
   function endpointIcon(kind, label) {
@@ -620,46 +657,62 @@
   }
 
   function renderCameraMarkers(cameras, highlightIds) {
+    // Full clear before rebuild — avoids stacking thousands of layers on refresh
     state.layers.cameras.clearLayers();
     state.layers.buffers.clearLayers();
 
-    cameras.forEach((cam) => {
-      if (cam.community && !state.showCommunity) return;
-      const near = highlightIds.has(cam.id);
+    const hi = highlightIds || new Set();
+    const list = prioritizeCamerasForDisplay(
+      (cameras || []).filter((c) => !(c.community && !state.showCommunity)),
+      hi
+    );
+
+    let bufferCount = 0;
+
+    list.forEach((cam) => {
+      const near = hi.has(cam.id);
       const marker = L.marker([cam.lat, cam.lng], {
         icon: cameraIcon(near, cam),
-        keyboard: true,
+        keyboard: false,
         title: cam.name,
+        riseOnHover: true,
       });
-      const region = cam.region ? ` · ${escapeHtml(cam.region)}` : "";
-      const conf = cam.confidence
-        ? `<br/><span style="color:#6b8578;font-size:11px">Confidence: ${escapeHtml(cam.confidence)}</span>`
-        : "";
-      const notes = cam.notes
-        ? `<br/><span style="color:#9fb5a8;font-size:11px">${escapeHtml(cam.notes)}</span>`
-        : "";
-      const mfr = cam.manufacturer || cam.operator
-        ? `<br/><span style="color:#6b8578;font-size:11px">${escapeHtml([cam.manufacturer, cam.operator].filter(Boolean).join(" · "))}</span>`
-        : "";
-      const osmLink =
-        cam.osmId
+
+      // Bind popup lazily — one HTML string only when opened (saves RAM)
+      marker.bindPopup(() => {
+        const region = cam.region ? ` · ${escapeHtml(cam.region)}` : "";
+        const conf = cam.confidence
+          ? `<br/><span style="color:#6b8578;font-size:11px">Confidence: ${escapeHtml(cam.confidence)}</span>`
+          : "";
+        const notes = cam.notes
+          ? `<br/><span style="color:#9fb5a8;font-size:11px">${escapeHtml(cam.notes)}</span>`
+          : "";
+        const mfr =
+          cam.manufacturer || cam.operator
+            ? `<br/><span style="color:#6b8578;font-size:11px">${escapeHtml(
+                [cam.manufacturer, cam.operator].filter(Boolean).join(" · ")
+              )}</span>`
+            : "";
+        const osmLink = cam.osmId
           ? `<br/><a href="https://www.openstreetmap.org/${cam.osmType || "node"}/${cam.osmId}" target="_blank" rel="noopener" style="color:#3dd68c;font-size:11px">View on OSM</a>`
           : "";
-      const del =
-        cam.community || cam.source === "community"
-          ? `<br/><button type="button" class="popup-del-report" data-report-id="${escapeHtml(cam.id)}" style="margin-top:6px;font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Remove report</button>`
-          : "";
-      const sourceLabel =
-        cam.source === "openstreetmap"
-          ? "OpenStreetMap (live)"
-          : cam.source === "community"
-            ? "Your report"
-            : escapeHtml(cam.source || "unknown");
-      marker.bindPopup(
-        `<strong>${escapeHtml(cam.name)}</strong><br/>
+        const del =
+          cam.community || cam.source === "community"
+            ? `<br/><button type="button" class="popup-del-report" data-report-id="${escapeHtml(
+                cam.id
+              )}" style="margin-top:6px;font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Remove report</button>`
+            : "";
+        const sourceLabel =
+          cam.source === "openstreetmap"
+            ? "OpenStreetMap (live)"
+            : cam.source === "community"
+              ? "Your report"
+              : escapeHtml(cam.source || "unknown");
+        return `<strong>${escapeHtml(cam.name)}</strong><br/>
          <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span><br/>
-         <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}`
-      );
+         <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}`;
+      });
+
       marker.on("popupopen", () => {
         const btn = document.querySelector(`.popup-del-report[data-report-id="${cam.id}"]`);
         btn?.addEventListener("click", () => {
@@ -672,21 +725,34 @@
       });
       state.layers.cameras.addLayer(marker);
 
-      if (state.showBuffers) {
+      // Buffers only for near-route / community, hard-capped (circles are expensive)
+      if (
+        state.showBuffers &&
+        bufferCount < MAX_BUFFER_CIRCLES &&
+        (near || cam.community || cam.source === "community")
+      ) {
         const isCommunity = cam.community || cam.source === "community";
         const color = near ? "#f5a623" : isCommunity ? "#a78bfa" : "#ef4444";
-        const circle = L.circle([cam.lat, cam.lng], {
+        L.circle([cam.lat, cam.lng], {
           radius: state.bufferMeters,
           color,
           weight: 1,
-          opacity: 0.45,
+          opacity: 0.4,
           fillColor: color,
-          fillOpacity: 0.06,
+          fillOpacity: 0.05,
           interactive: false,
-        });
-        state.layers.buffers.addLayer(circle);
+        }).addTo(state.layers.buffers);
+        bufferCount++;
       }
     });
+
+    if (cameras && cameras.length > list.length && els.osmStatus) {
+      // Soft note only; don't thrash toast on every pan
+      const st = typeof OverpassCameras !== "undefined" ? OverpassCameras.getStatus() : null;
+      if (st?.ok) {
+        els.osmStatus.textContent = `Live: showing ${list.length} of ${cameras.length} cameras (capped for device memory).`;
+      }
+    }
   }
 
   async function refreshCamerasAfterReportChange() {
@@ -979,16 +1045,16 @@
     bounds.extend([center.lat - dLat, center.lng - dLng]);
     bounds.extend([center.lat + dLat, center.lng + dLng]);
 
-    // Extra pad ~15% of span so cameras just off-route stay on screen
-    const padLat = Math.max(0.02, (bounds.getNorth() - bounds.getSouth()) * 0.12);
-    const padLng = Math.max(0.02, (bounds.getEast() - bounds.getWest()) * 0.12);
+    // Modest pad — large pads caused giant bboxes + OOM on mobile Overpass loads
+    const padLat = Math.min(0.08, Math.max(0.015, (bounds.getNorth() - bounds.getSouth()) * 0.08));
+    const padLng = Math.min(0.08, Math.max(0.015, (bounds.getEast() - bounds.getWest()) * 0.08));
     bounds = L.latLngBounds(
       [bounds.getSouth() - padLat, bounds.getWest() - padLng],
       [bounds.getNorth() + padLat, bounds.getEast() + padLng]
     );
 
     state.map.fitBounds(bounds, {
-      padding: [52, 52],
+      padding: [40, 40],
       maxZoom: 12,
       animate: true,
     });
@@ -1090,21 +1156,25 @@
     els.statsPanel?.classList.add("is-soft-loading");
 
     try {
-      const bounds = {
+      let bounds = {
         minLat: Math.min(state.start.lat, state.end.lat),
         maxLat: Math.max(state.start.lat, state.end.lat),
         minLng: Math.min(state.start.lng, state.end.lng),
         maxLng: Math.max(state.start.lng, state.end.lng),
       };
-      const padLat = Math.max(0.05, (bounds.maxLat - bounds.minLat) * 0.35);
-      const padLng = Math.max(0.05, (bounds.maxLng - bounds.minLng) * 0.35);
-      bounds.minLat -= padLat;
-      bounds.maxLat += padLat;
-      bounds.minLng -= padLng;
-      bounds.maxLng += padLng;
+      // Corridor pad — capped so long trips don't load half a state into memory
+      const padLat = Math.min(0.12, Math.max(0.04, (bounds.maxLat - bounds.minLat) * 0.2));
+      const padLng = Math.min(0.12, Math.max(0.04, (bounds.maxLng - bounds.minLng) * 0.2));
+      bounds = {
+        minLat: bounds.minLat - padLat,
+        maxLat: bounds.maxLat + padLat,
+        minLng: bounds.minLng - padLng,
+        maxLng: bounds.maxLng + padLng,
+      };
+      bounds = clampCorridorBounds(bounds);
 
       setLoading(true, state.useLiveOsm ? "Loading live OSM cameras…" : "Loading cameras…");
-      const cameras = await collectCameras(bounds, { forceLive: false });
+      const cameras = await collectCameras(bounds, { forceLive: false, forRouting: true });
       state.cameras = cameras;
 
       setLoadingStep("score");
@@ -2107,13 +2177,22 @@
 
   // ---------- Boot ----------
   function boot() {
+    // Drop bloated OSM camera caches from older builds (localStorage OOM risk)
+    if (typeof OverpassCameras !== "undefined" && OverpassCameras.clearCache) {
+      try {
+        OverpassCameras.clearCache();
+      } catch {
+        /* ignore */
+      }
+    }
+
     initMap();
     bindEvents();
     setupPWA();
     updateMapEmpty();
     updateOnlineStatus();
     refreshCommunityUI();
-    // GPS → ~25–50 mi local area + live cameras (no manual zoom needed)
+    // GPS → local area + live cameras (no manual zoom needed)
     autoFocusCurrentArea();
 
     console.info(

@@ -624,18 +624,23 @@ html, body {
   color: #6b8578 !important;
 }
 
-/* Camera marker */
+/* Camera marker — lite dots (memory-safe on phones) */
 .camera-marker {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.35);
   border: 2px solid #ef4444;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.35);
   color: #ef4444;
+}
+
+.camera-marker--lite {
+  width: 12px;
+  height: 12px;
 }
 
 .camera-marker.near-route {

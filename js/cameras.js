@@ -106,8 +106,9 @@ const CameraData = (() => {
       }
     }
 
-    // Cap procedural so huge map views stay usable
-    const maxProc = hot ? density * 14 : density * 8;
+    // Hard caps — mock data must never dominate memory on mobile
+    const maxProc = Math.min(hot ? density * 8 : density * 5, 120);
+    const maxKnown = 200;
     let procs = procedural;
     if (procs.length > maxProc) {
       procs = procs
@@ -117,7 +118,8 @@ const CameraData = (() => {
         .map((x) => x.c);
     }
 
-    return [...known, ...procs];
+    const knownCapped = known.length > maxKnown ? known.slice(0, maxKnown) : known;
+    return [...knownCapped, ...procs];
   }
 
   /**
