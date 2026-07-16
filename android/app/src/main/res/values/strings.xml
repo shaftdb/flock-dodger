@@ -4,4 +4,8 @@
     <string name="title_activity_main">Flock Dodger</string>
     <string name="package_name">com.flockdodger.app</string>
     <string name="custom_url_scheme">com.flockdodger.app</string>
+    <string name="shortcut_plan_short">Plan route</string>
+    <string name="shortcut_plan_long">Open Flock Dodger to plan a privacy route</string>
+    <string name="shortcut_home_short">Route home</string>
+    <string name="shortcut_home_long">Open app and jump to saved Home area</string>
 </resources>

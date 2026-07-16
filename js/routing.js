@@ -276,6 +276,19 @@ const Routing = (() => {
       extraDistRatio: standard.distance > 0 ? extraDist / standard.distance : 0,
     });
 
+    const detourReasons = buildDetourReasons({
+      standard,
+      avoid: avoidRoute,
+      camsOnStandard,
+      camsOnAvoid,
+      avoidedCount,
+      extraDist,
+      extraTime,
+      fromAlternative: Boolean(avoidRoute.fromAlternative),
+      fromAvoidVia: Boolean(avoidRoute.fromAvoidVia),
+      userShaped: Boolean(avoidRoute.userShaped),
+    });
+
     return {
       standard,
       avoid: avoidRoute,
@@ -286,7 +299,42 @@ const Routing = (() => {
       extraTime,
       privacyScore,
       bufferMeters,
+      detourReasons,
+      alternativeCount: alternatives.length,
     };
+  }
+
+  function buildDetourReasons(ctx) {
+    const reasons = [];
+    if (ctx.userShaped) {
+      reasons.push("You shaped this path with drag handles.");
+    }
+    if (ctx.avoidedCount > 0) {
+      reasons.push(
+        `Avoids ${ctx.avoidedCount} camera${ctx.avoidedCount === 1 ? "" : "s"} that sit on the standard route.`
+      );
+    } else if (ctx.camsOnStandard?.length === 0) {
+      reasons.push("Standard corridor already looks clear in the loaded camera set.");
+    } else {
+      reasons.push("No cleaner road alternative found — avoid route matches standard exposure.");
+    }
+    if (ctx.fromAlternative) {
+      reasons.push("Uses an OSRM alternative road path (not a geometric off-road detour).");
+    }
+    if (ctx.fromAvoidVia) {
+      reasons.push("Nudged via soft waypoints past camera clusters, snapped to the road network.");
+    }
+    if (ctx.extraDist > 200) {
+      reasons.push(
+        `Trades about ${formatDistance(ctx.extraDist)} / ${formatDuration(ctx.extraTime)} for lower exposure.`
+      );
+    }
+    if (ctx.camsOnAvoid?.length > 0) {
+      reasons.push(
+        `${ctx.camsOnAvoid.length} camera${ctx.camsOnAvoid.length === 1 ? "" : "s"} still within your buffer on the avoid path.`
+      );
+    }
+    return reasons;
   }
 
   /**

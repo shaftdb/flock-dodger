@@ -1,13 +1,16 @@
 /**
- * LocalStorage helpers for saved routes and community camera reports.
+ * LocalStorage helpers: routes, reports, saved areas, camera votes.
  */
 
 const Storage = (() => {
   const KEY = "flock-dodger-saved-routes";
   const SETTINGS_KEY = "flock-dodger-settings";
   const REPORTS_KEY = "flock-dodger-community-reports";
+  const AREAS_KEY = "flock-dodger-saved-areas";
+  const VOTES_KEY = "flock-dodger-camera-votes";
   const MAX_ROUTES = 25;
   const MAX_REPORTS = 200;
+  const MAX_AREAS = 12;
 
   function loadRoutes() {
     try {
@@ -24,9 +27,6 @@ const Storage = (() => {
     localStorage.setItem(KEY, JSON.stringify(routes.slice(0, MAX_ROUTES)));
   }
 
-  /**
-   * @param {{id?: string, name?: string, start: object, end: object, bufferMeters: number, stats?: object, createdAt?: string}} route
-   */
   function addRoute(route) {
     const routes = loadRoutes();
     const entry = {
@@ -71,7 +71,7 @@ const Storage = (() => {
     return next;
   }
 
-  // ── Community camera reports ─────────────────────────────────────────────
+  // ── Community reports ────────────────────────────────────────────────────
 
   function loadReports() {
     try {
@@ -88,13 +88,6 @@ const Storage = (() => {
     localStorage.setItem(REPORTS_KEY, JSON.stringify(reports.slice(0, MAX_REPORTS)));
   }
 
-  /**
-   * @param {{
-   *   lat: number, lng: number, name?: string, type?: string,
-   *   notes?: string, direction?: string, confidence?: string,
-   *   address?: string
-   * }} report
-   */
   function addReport(report) {
     const lat = Number(report.lat);
     const lng = Number(report.lng);
@@ -152,7 +145,6 @@ const Storage = (() => {
     return [];
   }
 
-  /** Shape community reports like CameraData points for map/routing merge */
   function reportsAsCameras(bounds) {
     let list = loadReports();
     if (bounds) {
@@ -176,7 +168,77 @@ const Storage = (() => {
       notes: r.notes,
       confidence: r.confidence,
       community: true,
+      alpr: true,
+      category: "alpr",
     }));
+  }
+
+  // ── Saved areas (home / work corridors) ──────────────────────────────────
+
+  function loadAreas() {
+    try {
+      const data = JSON.parse(localStorage.getItem(AREAS_KEY) || "[]");
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveAreas(areas) {
+    localStorage.setItem(AREAS_KEY, JSON.stringify(areas.slice(0, MAX_AREAS)));
+  }
+
+  /**
+   * @param {{id?:string, label:string, lat:number, lng:number, radiusMi?:number}} area
+   */
+  function upsertArea(area) {
+    const areas = loadAreas();
+    const id = area.id || `area-${area.label.toLowerCase().replace(/\s+/g, "-")}`;
+    const entry = {
+      id,
+      label: area.label,
+      lat: Number(area.lat),
+      lng: Number(area.lng),
+      radiusMi: area.radiusMi ?? 20,
+      updatedAt: new Date().toISOString(),
+    };
+    const idx = areas.findIndex((a) => a.id === id || a.label === area.label);
+    if (idx >= 0) areas[idx] = entry;
+    else areas.push(entry);
+    saveAreas(areas);
+    return entry;
+  }
+
+  function removeArea(id) {
+    const areas = loadAreas().filter((a) => a.id !== id);
+    saveAreas(areas);
+    return areas;
+  }
+
+  // ── Camera quality votes (local) ─────────────────────────────────────────
+
+  function loadVotes() {
+    try {
+      return JSON.parse(localStorage.getItem(VOTES_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function saveVotes(votes) {
+    localStorage.setItem(VOTES_KEY, JSON.stringify(votes));
+  }
+
+  /** @param {string} cameraId @param {"still_there"|"gone"|"unsure"} vote */
+  function setCameraVote(cameraId, vote) {
+    const votes = loadVotes();
+    votes[cameraId] = { vote, at: new Date().toISOString() };
+    saveVotes(votes);
+    return votes[cameraId];
+  }
+
+  function getCameraVote(cameraId) {
+    return loadVotes()[cameraId] || null;
   }
 
   return {
@@ -192,5 +254,11 @@ const Storage = (() => {
     removeReport,
     clearReports,
     reportsAsCameras,
+    loadAreas,
+    upsertArea,
+    removeArea,
+    loadVotes,
+    setCameraVote,
+    getCameraVote,
   };
 })();

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0f0d" />
+  <title>Privacy Policy — Flock Dodger</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            flock: { bg: "#0a0f0d", surface: "#111916", border: "#1e2e26", muted: "#6b8578", text: "#e8f0eb", accent: "#3dd68c" },
+          },
+        },
+      },
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: "DM Sans", system-ui, sans-serif; }
+    a { color: #3dd68c; }
+  </style>
+</head>
+<body class="bg-flock-bg text-flock-text min-h-dvh">
+  <main class="max-w-2xl mx-auto px-4 py-10">
+    <p class="text-xs text-flock-muted mb-2"><a href="index.html">← Back to Flock Dodger</a></p>
+    <h1 class="text-2xl font-semibold tracking-tight mb-1">Privacy Policy</h1>
+    <p class="text-sm text-flock-muted mb-8">Last updated: 2026-07-16 · Applies to the Flock Dodger web app and Android wrapper.</p>
+
+    <div class="space-y-6 text-sm text-flock-dim leading-relaxed">
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Summary</h2>
+        <p>Flock Dodger is a privacy-focused routing helper. We do <strong class="text-flock-text">not</strong> require an account, do <strong class="text-flock-text">not</strong> run ads, and do <strong class="text-flock-text">not</strong> sell your data. Most information stays on your device.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Data we process</h2>
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li><strong class="text-flock-text">Addresses you type</strong> — sent to the public OpenStreetMap Nominatim geocoding service to convert text to coordinates.</li>
+          <li><strong class="text-flock-text">Start/end coordinates</strong> — sent to the public OSRM routing service to compute driving routes.</li>
+          <li><strong class="text-flock-text">Map area</strong> — sent to OpenStreetMap Overpass servers to load community-mapped cameras in the visible region.</li>
+          <li><strong class="text-flock-text">Location (optional)</strong> — only if you tap “use my location” or enable Trip mode; used on-device to set start or show cameras ahead. Not uploaded to a Flock Dodger server (we don’t operate one for analytics).</li>
+          <li><strong class="text-flock-text">On-device storage</strong> — saved routes, camera reports, quality votes, saved areas, and settings use browser / app local storage only.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Third-party services</h2>
+        <p>Map tiles, geocoding, routing, and camera queries use third-party public APIs (for example OSM/Nominatim, OSRM, Overpass, CARTO tiles). Those operators may see IP addresses and request content under their own policies. We do not control their logs.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">What we do not do</h2>
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>No accounts or profiles</li>
+          <li>No advertising SDKs or tracking pixels for monetization</li>
+          <li>No sale of location or route history</li>
+          <li>No proprietary Flock Safety account integration</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Payments</h2>
+        <p>Optional support may open third-party payment apps (for example Cash App) that you choose to use. Payment providers process those transactions under their own terms. Flock Dodger does not receive your bank credentials.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Children</h2>
+        <p>The app is not directed at children under 13. Do not use it to collect information from children.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Changes</h2>
+        <p>We may update this policy as features change. The “Last updated” date at the top will change when we do.</p>
+      </section>
+
+      <section>
+        <h2 class="text-base font-semibold text-flock-text mb-2">Contact</h2>
+        <p>For privacy questions about this project, open an issue on the public GitHub repository for Flock Dodger or contact the maintainer listed there.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

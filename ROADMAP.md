@@ -1,33 +1,30 @@
-# Flock Dodger — ideas for testers this week
+# Flock Dodger — roadmap
 
-## Already improved
-- Live OSM cameras (ALPR + optional broader surveillance)
-- Android Capacitor shell for Play Store path
-- Privacy-first free core
+## Shipped (high-value set)
 
-## High-value next features
+1. **Trip mode** — wake lock, next camera ahead, progress along route  
+2. **Saved areas** — Home / Work pins + quick jump (Android shortcut `?area=home`)  
+3. **Shareable route link** — `#r=lat,lng|lat,lng&b=150` copy button  
+4. **Report quality** — Still there / Gone on OSM cameras (local)  
+5. **Layer filters** — ALPR, CCTV, speed, reports separately  
+6. **Why this detour** — reasons panel after plan  
+7. **Low-data / night mode** — fewer markers + dimmer tiles  
+8. **Import GPX** — score track against cameras, then plan ends  
+9. **Android shortcuts** — Plan route + Route home  
+10. **Privacy policy** — `privacy.html` for Play Store  
 
-1. **Trip mode** — keep screen on, show next cameras ahead along route, simple “camera in X miles” banner  
-2. **Saved areas** — pin “home / work corridors” and pre-load OSM packs for those bboxes  
-3. **Shareable route link** — copy URL with start/end (no account); open on phone  
-4. **Report quality** — thumbs up/down on OSM cameras (“gone”, “still there”) stored locally first  
-5. **Layer filters** — toggle ALPR / CCTV / speed separately on the map  
-6. **Better avoidance** — multiple OSRM alternatives scored; show “why this detour”  
-7. **Night / low-data mode** — fewer tiles, fewer markers, offline shell first  
-8. **Import GPX** — drop a planned trip file and score cameras along it  
-9. **Widget / shortcut** — Android shortcut: “Route home avoiding cameras”  
-10. **Privacy policy page** — required for Play Store location access  
+## Later ideas
+- Trip “camera in X miles” voice cue  
+- Cloud-free export of local reports/votes as JSON  
+- Self-hosted Overpass for heavy testers  
+- iOS via Capacitor when ready  
 
-## Data ideas
-- OSM `man_made=surveillance` (done as mode)  
-- Speed cameras (`highway=speed_camera`)  
-- Later: optional user-contributed “hotspots” export (JSON file, not a server)  
-- Never depend on proprietary Flock APIs  
-
-## Testing checklist for friends
-- [ ] Plan real commute / work trip  
-- [ ] Compare standard vs avoid time  
-- [ ] Export to Google/Waze and verify usability  
-- [ ] Toggle “All surveillance” vs ALPR-only  
-- [ ] Report a missing camera  
-- [ ] Try on Android build when available  
+## Testing checklist
+- [ ] Plan real trip; read “Why this detour”  
+- [ ] Share link → open on phone  
+- [ ] Save Home/Work; use shortcut  
+- [ ] Toggle ALPR / CCTV / speed  
+- [ ] Vote camera gone/still there  
+- [ ] Import a GPX  
+- [ ] Trip mode while driving a short loop  
+- [ ] Low-data mode on mobile data  

@@ -1123,6 +1123,36 @@ body.report-pick-mode .leaflet-container {
   }
 }
 
+/* Trip mode banner */
+.trip-banner {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: 0.75rem;
+  z-index: 16;
+  max-width: 22rem;
+  margin-inline: auto;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(61, 214, 140, 0.35);
+  background: rgba(17, 25, 22, 0.94);
+  backdrop-filter: blur(8px);
+  padding: 0.75rem 0.85rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.trip-banner[hidden] {
+  display: none !important;
+}
+
+body.low-data .leaflet-tile {
+  filter: brightness(0.85) contrast(1.05);
+}
+
+body.low-data .camera-marker:not(.near-route):not(.community) {
+  opacity: 0.55;
+  transform: scale(0.85);
+}
+
 /* Soft support prompt — bottom chip, non-blocking */
 .support-soft-prompt {
   position: fixed;

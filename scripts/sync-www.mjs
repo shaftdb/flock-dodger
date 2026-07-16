@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const www = join(root, "www");
 
-const FILES = ["index.html", "manifest.json", "sw.js", "css", "js", "icons"];
+const FILES = ["index.html", "privacy.html", "manifest.json", "sw.js", "css", "js", "icons", "ANDROID.md"];
 
 if (existsSync(www)) {
   rmSync(www, { recursive: true, force: true });

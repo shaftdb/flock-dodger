@@ -269,14 +269,30 @@
               </div>
             </div>
 
+            <!-- Why this detour -->
+            <div id="detour-reasons" class="mt-3 rounded-xl border border-flock-border bg-flock-bg/50 px-3 py-2.5 hidden">
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-flock-muted mb-1.5">Why this detour</p>
+              <ul id="detour-reasons-list" class="text-xs text-flock-dim space-y-1 leading-relaxed list-disc pl-4"></ul>
+            </div>
+
             <div class="flex gap-2 mt-3">
               <button id="btn-save-route" type="button" class="btn-secondary flex-1 text-xs">
                 <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
                 Save route
               </button>
+              <button id="btn-share-route" type="button" class="btn-secondary flex-1 text-xs">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+                Share link
+              </button>
               <button id="btn-fit" type="button" class="btn-secondary flex-1 text-xs">
                 <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
-                Fit map
+                Fit
+              </button>
+            </div>
+
+            <div class="flex gap-2 mt-2">
+              <button id="btn-trip-mode" type="button" class="btn-secondary flex-1 text-xs">
+                Start trip mode
               </button>
             </div>
 
@@ -345,9 +361,30 @@
               <label class="toggle-row">
                 <span class="flex items-center gap-2 text-sm">
                   <span class="h-2 w-2 rounded-full bg-flock-danger"></span>
-                  ALPR / Flock cameras
+                  ALPR / Flock
                 </span>
-                <input type="checkbox" id="toggle-cameras" class="toggle" checked />
+                <input type="checkbox" id="toggle-layer-alpr" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-sky-400"></span>
+                  Security CCTV
+                </span>
+                <input type="checkbox" id="toggle-layer-cctv" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                  Speed cameras
+                </span>
+                <input type="checkbox" id="toggle-layer-speed" class="toggle" checked />
+              </label>
+              <label class="toggle-row">
+                <span class="flex items-center gap-2 text-sm">
+                  <span class="h-2 w-2 rounded-full bg-violet-400"></span>
+                  Your reports
+                </span>
+                <input type="checkbox" id="toggle-community" class="toggle" checked />
               </label>
               <label class="toggle-row">
                 <span class="flex items-center gap-2 text-sm">
@@ -372,12 +409,32 @@
               </label>
               <label class="toggle-row">
                 <span class="flex items-center gap-2 text-sm">
-                  <span class="h-2 w-2 rounded-full bg-violet-400"></span>
-                  Community reports
+                  Low-data / night mode
                 </span>
-                <input type="checkbox" id="toggle-community" class="toggle" checked />
+                <input type="checkbox" id="toggle-low-data" class="toggle" />
               </label>
             </div>
+          </section>
+
+          <!-- Saved areas -->
+          <section aria-labelledby="areas-heading">
+            <h2 id="areas-heading" class="section-label">Saved areas</h2>
+            <p class="text-[11px] text-flock-muted mb-2 leading-relaxed">Pin home / work corridors for quick zoom and camera load.</p>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+              <button type="button" id="btn-save-home" class="btn-secondary text-xs">Save as Home</button>
+              <button type="button" id="btn-save-work" class="btn-secondary text-xs">Save as Work</button>
+            </div>
+            <div id="areas-list" class="space-y-1.5"></div>
+          </section>
+
+          <!-- GPX import -->
+          <section aria-labelledby="gpx-heading">
+            <h2 id="gpx-heading" class="section-label">Import GPX</h2>
+            <label class="btn-secondary w-full text-xs cursor-pointer">
+              <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml,text/xml" class="sr-only" />
+              Choose GPX track to score
+            </label>
+            <p id="gpx-status" class="text-[10px] text-flock-muted mt-1.5"></p>
           </section>
 
           <!-- Community reports -->
@@ -436,7 +493,9 @@
           <section id="premium-active-panels" class="space-y-2 hidden" aria-label="Unlocked premium tools"></section>
 
           <p class="text-[10px] text-flock-muted leading-relaxed pb-2">
-            Live cameras come from OpenStreetMap (Overpass) where volunteers map ALPR / Flock units. Coverage varies by area — add missing ones with Report. Not legal advice; always verify critical routes.
+            Live cameras come from OpenStreetMap (Overpass). Coverage varies — add missing ones with Report.
+            <a href="privacy.html" class="text-flock-accent hover:underline">Privacy policy</a>
+            · Not legal advice.
           </p>
         </div>
       </aside>
@@ -459,6 +518,21 @@
               <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-accent"></span> Drag A/B to move endpoints</li>
               <li class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-flock-avoid"></span> Drag green handles to bend the avoid route</li>
             </ul>
+          </div>
+        </div>
+
+        <!-- Trip mode banner -->
+        <div id="trip-banner" class="trip-banner" hidden role="status" aria-live="polite">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] uppercase tracking-wide text-flock-muted font-semibold">Trip mode</p>
+              <p id="trip-next" class="text-sm font-semibold text-flock-text mt-0.5">Looking for GPS…</p>
+              <p id="trip-meta" class="text-[11px] text-flock-muted mt-0.5"></p>
+            </div>
+            <button type="button" id="btn-trip-stop" class="btn-secondary text-[10px] px-2 py-1 shrink-0">End</button>
+          </div>
+          <div class="mt-2 h-1 rounded-full bg-flock-border overflow-hidden">
+            <div id="trip-progress" class="h-full bg-flock-accent transition-all duration-500" style="width:0%"></div>
           </div>
         </div>
 
@@ -705,6 +779,9 @@
   <script src="js/routing.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/export-maps.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/gpx.js"></script>
+  <script src="js/trip-mode.js"></script>
   <script src="js/premium.js"></script>
   <script src="js/premium-ui.js"></script>
   <script src="js/pwa.js"></script>

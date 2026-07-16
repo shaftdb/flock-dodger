@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="plan_route"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_plan_short"
+        android:shortcutLongLabel="@string/shortcut_plan_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.flockdodger.app"
+            android:targetClass="com.flockdodger.app.MainActivity"
+            android:data="https://shaftdb.github.io/flock-dodger/" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="route_home"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_home_short"
+        android:shortcutLongLabel="@string/shortcut_home_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.flockdodger.app"
+            android:targetClass="com.flockdodger.app.MainActivity"
+            android:data="https://shaftdb.github.io/flock-dodger/?area=home" />
+    </shortcut>
+</shortcuts>

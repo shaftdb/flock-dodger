@@ -23,11 +23,14 @@
       startMarker: null,
       endMarker: null,
     },
-    showCameras: true,
     showStandard: true,
     showAvoid: true,
     showBuffers: false,
     showCommunity: true,
+    showAlpr: true,
+    showCctv: true,
+    showSpeed: true,
+    lowData: false,
     useLiveOsm: true,
     /** "alpr" = Flock/ALPR only; "all" = broader OSM surveillance cameras */
     osmMode: "all",
@@ -106,15 +109,32 @@
     savedModal: $("saved-modal"),
     savedList: $("saved-list"),
     savedEmpty: $("saved-empty"),
-    toggleCameras: $("toggle-cameras"),
     toggleStandard: $("toggle-standard"),
     toggleAvoid: $("toggle-avoid"),
     toggleBuffers: $("toggle-buffers"),
     toggleCommunity: $("toggle-community"),
+    toggleLayerAlpr: $("toggle-layer-alpr"),
+    toggleLayerCctv: $("toggle-layer-cctv"),
+    toggleLayerSpeed: $("toggle-layer-speed"),
+    toggleLowData: $("toggle-low-data"),
     toggleLiveOsm: $("toggle-live-osm"),
     osmModeSelect: $("osm-mode-select"),
     osmStatus: $("osm-status"),
     btnRefreshOsm: $("btn-refresh-osm"),
+    btnShareRoute: $("btn-share-route"),
+    btnTripMode: $("btn-trip-mode"),
+    btnTripStop: $("btn-trip-stop"),
+    tripBanner: $("trip-banner"),
+    tripNext: $("trip-next"),
+    tripMeta: $("trip-meta"),
+    tripProgress: $("trip-progress"),
+    detourReasons: $("detour-reasons"),
+    detourReasonsList: $("detour-reasons-list"),
+    btnSaveHome: $("btn-save-home"),
+    btnSaveWork: $("btn-save-work"),
+    areasList: $("areas-list"),
+    gpxInput: $("gpx-input"),
+    gpxStatus: $("gpx-status"),
     btnReport: $("btn-report"),
     btnReportOpen: $("btn-report-open"),
     reportModal: $("report-modal"),
@@ -142,7 +162,7 @@
   /** Default local area radius in miles (mid of ~25–50 mi) */
   const LOCAL_AREA_RADIUS_MI = 30;
   /** Hard cap: Leaflet DOM markers blow up mobile memory above a few hundred */
-  const MAX_MAP_MARKERS = 350;
+  let MAX_MAP_MARKERS = 350;
   const MAX_ROUTE_CAMERAS = 500;
   const MAX_BUFFER_CIRCLES = 80;
 
@@ -592,16 +612,29 @@
     }).addTo(state.layers.preview);
   }
 
+  function cameraPassesLayerFilter(cam) {
+    if (cam.community || cam.source === "community") return state.showCommunity;
+    const cat = cam.category || (cam.alpr ? "alpr" : "surveillance");
+    if (cat === "alpr") return state.showAlpr;
+    if (cat === "speed") return state.showSpeed;
+    return state.showCctv; // surveillance / other
+  }
+
   function renderCameraMarkers(cameras, highlightIds) {
     // Full clear before rebuild — avoids stacking thousands of layers on refresh
     state.layers.cameras.clearLayers();
     state.layers.buffers.clearLayers();
 
     const hi = highlightIds || new Set();
-    const list = prioritizeCamerasForDisplay(
-      (cameras || []).filter((c) => !(c.community && !state.showCommunity)),
-      hi
-    );
+    MAX_MAP_MARKERS = state.lowData ? 180 : 350;
+    const filtered = (cameras || []).filter((c) => {
+      if (!cameraPassesLayerFilter(c)) return false;
+      // Hide cameras user marked "gone"
+      const vote = Storage.getCameraVote?.(c.id);
+      if (vote?.vote === "gone") return false;
+      return true;
+    });
+    const list = prioritizeCamerasForDisplay(filtered, hi);
 
     let bufferCount = 0;
 
@@ -638,6 +671,16 @@
                 cam.id
               )}" style="margin-top:6px;font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Remove report</button>`
             : "";
+        const vote = Storage.getCameraVote?.(cam.id);
+        const voteLabel = vote ? ` · you marked: ${vote.vote.replace("_", " ")}` : "";
+        const votes =
+          cam.source === "openstreetmap" || cam.live
+            ? `<br/><span style="display:inline-flex;gap:8px;margin-top:6px">
+                <button type="button" class="popup-vote" data-vote="still_there" data-cam="${escapeHtml(cam.id)}" style="font-size:11px;color:#86efac;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Still there</button>
+                <button type="button" class="popup-vote" data-vote="gone" data-cam="${escapeHtml(cam.id)}" style="font-size:11px;color:#fca5a5;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Gone</button>
+              </span>
+              <span style="color:#6b8578;font-size:10px">${escapeHtml(voteLabel)}</span>`
+            : "";
         const sourceLabel =
           cam.source === "openstreetmap"
             ? "OpenStreetMap (live)"
@@ -651,7 +694,7 @@
           : "";
         return `<strong>${escapeHtml(cam.name)}</strong><br/>
          <span style="color:#9fb5a8">${escapeHtml(cam.type)}${region}</span>${catLabel}<br/>
-         <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}`;
+         <span style="color:#6b8578;font-size:11px">Source: ${sourceLabel}</span>${mfr}${conf}${notes}${osmLink}${del}${votes}`;
       });
 
       marker.on("popupopen", () => {
@@ -662,6 +705,19 @@
           refreshCommunityUI();
           refreshCamerasAfterReportChange();
           showToast("Community report removed", "success");
+        });
+        document.querySelectorAll(`.popup-vote[data-cam="${cam.id}"]`).forEach((vb) => {
+          vb.addEventListener("click", () => {
+            const v = vb.getAttribute("data-vote");
+            Storage.setCameraVote(cam.id, v);
+            marker.closePopup();
+            const hi = new Set([
+              ...(state.lastPlan?.camsOnStandard || []).map((c) => c.id),
+              ...(state.lastPlan?.camsOnAvoid || []).map((c) => c.id),
+            ]);
+            renderCameraMarkers(state.cameras, hi);
+            showToast(v === "gone" ? "Marked gone (hidden on map)" : "Marked still there", "success");
+          });
         });
       });
       state.layers.cameras.addLayer(marker);
@@ -1050,6 +1106,18 @@
     els.stdDuration.textContent = Routing.formatDuration(plan.standard.duration);
     els.avoidDistance.textContent = Routing.formatDistance(plan.avoid.distance);
     els.avoidDuration.textContent = Routing.formatDuration(plan.avoid.duration);
+
+    // Why this detour
+    if (els.detourReasons && els.detourReasonsList) {
+      const reasons = plan.detourReasons || [];
+      if (reasons.length) {
+        els.detourReasons.classList.remove("hidden");
+        els.detourReasonsList.innerHTML = reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+      } else {
+        els.detourReasons.classList.add("hidden");
+        els.detourReasonsList.innerHTML = "";
+      }
+    }
   }
 
   // ---------- Planning ----------
@@ -1780,11 +1848,14 @@
     });
 
     // Layers
-    els.toggleCameras.addEventListener("change", () => {
-      state.showCameras = els.toggleCameras.checked;
-      if (state.showCameras) state.map.addLayer(state.layers.cameras);
-      else state.map.removeLayer(state.layers.cameras);
-    });
+    const rerenderCameras = () => {
+      const highlight = new Set([
+        ...(state.lastPlan?.camsOnStandard || []).map((c) => c.id),
+        ...(state.lastPlan?.camsOnAvoid || []).map((c) => c.id),
+      ]);
+      renderCameraMarkers(state.cameras, highlight);
+    };
+
     els.toggleStandard.addEventListener("change", () => {
       state.showStandard = els.toggleStandard.checked;
       if (state.showStandard) state.map.addLayer(state.layers.standard);
@@ -1804,11 +1875,7 @@
       state.showBuffers = els.toggleBuffers.checked;
       if (state.showBuffers) {
         state.map.addLayer(state.layers.buffers);
-        const highlight = new Set([
-          ...(state.lastPlan?.camsOnStandard || []).map((c) => c.id),
-          ...(state.lastPlan?.camsOnAvoid || []).map((c) => c.id),
-        ]);
-        renderCameraMarkers(state.cameras, highlight);
+        rerenderCameras();
       } else {
         state.map.removeLayer(state.layers.buffers);
         state.layers.buffers.clearLayers();
@@ -1817,7 +1884,32 @@
     els.toggleCommunity?.addEventListener("change", () => {
       state.showCommunity = els.toggleCommunity.checked;
       Storage.saveSettings({ showCommunity: state.showCommunity });
-      refreshCamerasAfterReportChange();
+      rerenderCameras();
+    });
+    els.toggleLayerAlpr?.addEventListener("change", () => {
+      state.showAlpr = els.toggleLayerAlpr.checked;
+      Storage.saveSettings({ showAlpr: state.showAlpr });
+      rerenderCameras();
+    });
+    els.toggleLayerCctv?.addEventListener("change", () => {
+      state.showCctv = els.toggleLayerCctv.checked;
+      Storage.saveSettings({ showCctv: state.showCctv });
+      rerenderCameras();
+    });
+    els.toggleLayerSpeed?.addEventListener("change", () => {
+      state.showSpeed = els.toggleLayerSpeed.checked;
+      Storage.saveSettings({ showSpeed: state.showSpeed });
+      rerenderCameras();
+    });
+    els.toggleLowData?.addEventListener("change", () => {
+      state.lowData = els.toggleLowData.checked;
+      document.body.classList.toggle("low-data", state.lowData);
+      Storage.saveSettings({ lowData: state.lowData });
+      if (state.lowData && state.map.getZoom() < 10) {
+        // fewer Overpass hits when zoomed out
+      }
+      rerenderCameras();
+      showToast(state.lowData ? "Low-data mode on" : "Low-data mode off", "success");
     });
     els.toggleLiveOsm?.addEventListener("change", () => {
       state.useLiveOsm = els.toggleLiveOsm.checked;
@@ -1839,6 +1931,91 @@
       } else {
         showToast("Refreshing live OSM cameras…", "success");
         await refreshCamerasForView(true);
+      }
+    });
+
+    // Share link
+    els.btnShareRoute?.addEventListener("click", async () => {
+      if (!state.start || !state.end) {
+        showToast("Plan a route first", "error");
+        return;
+      }
+      try {
+        const url = await ShareRoute.copyLink(state.start, state.end, state.bufferMeters);
+        // keep hash in address bar for reloads
+        history.replaceState(null, "", ShareRoute.encode(state.start, state.end, state.bufferMeters));
+        showToast("Share link copied", "success");
+      } catch (err) {
+        showToast(err.message || "Could not copy link", "error");
+      }
+    });
+
+    // Trip mode
+    els.btnTripMode?.addEventListener("click", () => {
+      if (typeof TripMode === "undefined") return;
+      if (TripMode.isActive()) {
+        stopTripMode();
+        return;
+      }
+      if (!state.lastPlan?.avoid?.coords?.length && !state.lastPlan?.standard?.coords?.length) {
+        showToast("Plan a route before starting trip mode", "error");
+        return;
+      }
+      startTripMode();
+    });
+    els.btnTripStop?.addEventListener("click", () => stopTripMode());
+
+    // Saved areas
+    els.btnSaveHome?.addEventListener("click", () => saveAreaFromMap("Home"));
+    els.btnSaveWork?.addEventListener("click", () => saveAreaFromMap("Work"));
+    renderAreasList();
+
+    // GPX
+    els.gpxInput?.addEventListener("change", async () => {
+      const file = els.gpxInput.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const gpx = GpxUtil.parseGpxText(text);
+        state.start = gpx.start;
+        state.end = gpx.end;
+        state.userVias = [];
+        els.startInput.value = gpx.start.display_name;
+        els.endInput.value = gpx.end.display_name;
+        // Score cameras along GPX geometry without full re-route first
+        const bounds = {
+          minLat: Math.min(...gpx.coords.map((c) => c[0])),
+          maxLat: Math.max(...gpx.coords.map((c) => c[0])),
+          minLng: Math.min(...gpx.coords.map((c) => c[1])),
+          maxLng: Math.max(...gpx.coords.map((c) => c[1])),
+        };
+        setLoading(true, "Scoring GPX against cameras…");
+        const cameras = await collectCameras(bounds, { forRouting: true });
+        const near = CameraData.camerasNearRoute(cameras, gpx.coords, state.bufferMeters);
+        const dist = GpxUtil.lengthMeters(gpx.coords);
+        if (els.gpxStatus) {
+          els.gpxStatus.textContent = `${gpx.coords.length} points · ${Routing.formatDistance(dist)} · ${near.length} camera(s) within buffer`;
+        }
+        // Draw GPX as avoid-style preview and set endpoints
+        setEndpoints(state.start, state.end);
+        state.layers.avoid.clearLayers();
+        L.polyline(gpx.coords, {
+          color: "#3dd68c",
+          weight: 5,
+          opacity: 0.9,
+        }).addTo(state.layers.avoid);
+        state.map.fitBounds(gpx.coords, { padding: [40, 40], maxZoom: 12 });
+        state.cameras = cameras;
+        renderCameraMarkers(cameras, new Set(near.map((c) => c.id)));
+        showToast(`GPX loaded — ${near.length} camera(s) nearby`, "success");
+        // Also compute full privacy routes between ends
+        await runPlan({ preserveVias: false, quiet: true });
+      } catch (err) {
+        if (els.gpxStatus) els.gpxStatus.textContent = err.message || "GPX import failed";
+        showToast(err.message || "GPX import failed", "error");
+      } finally {
+        setLoading(false);
+        els.gpxInput.value = "";
       }
     });
 
@@ -1869,6 +2046,141 @@
         if (typeof PremiumUI !== "undefined") PremiumUI.renderFeatureList();
       });
     }
+  }
+
+  // ---------- Trip mode ----------
+  function startTripMode() {
+    const coords =
+      state.lastPlan?.avoid?.coords || state.lastPlan?.standard?.coords || [];
+    const cams =
+      state.lastPlan?.camsOnAvoid ||
+      state.lastPlan?.camsOnStandard ||
+      state.cameras ||
+      [];
+    if (els.tripBanner) els.tripBanner.hidden = false;
+    if (els.btnTripMode) els.btnTripMode.textContent = "Trip mode on";
+    document.body.classList.add("trip-mode-on");
+    TripMode.start({
+      coords,
+      cameras: cams,
+      bufferMeters: state.bufferMeters,
+      seedLat: state.start?.lat,
+      seedLng: state.start?.lng,
+      onUpdate: (u) => {
+        if (!u.active) {
+          if (els.tripBanner) els.tripBanner.hidden = true;
+          if (els.btnTripMode) els.btnTripMode.textContent = "Start trip mode";
+          document.body.classList.remove("trip-mode-on");
+          return;
+        }
+        if (els.tripProgress) els.tripProgress.style.width = `${u.progressPct || 0}%`;
+        if (u.next) {
+          const mi = u.next.remainMi;
+          const distStr =
+            mi < 0.15
+              ? `${Math.round(u.next.remainM)} m`
+              : `${mi < 10 ? mi.toFixed(1) : Math.round(mi)} mi`;
+          if (els.tripNext) {
+            els.tripNext.textContent = `Camera ahead · ${distStr}`;
+          }
+          if (els.tripMeta) {
+            els.tripMeta.textContent = `${u.next.cam.name || u.next.cam.type} · ${
+              u.aheadCount
+            } ahead · ${u.progressPct || 0}% along route`;
+          }
+        } else {
+          if (els.tripNext) els.tripNext.textContent = "No cameras ahead on path";
+          if (els.tripMeta) {
+            els.tripMeta.textContent = `${u.progressPct || 0}% along route · screen stays on`;
+          }
+        }
+      },
+    });
+    showToast("Trip mode on — screen stays awake while supported", "success");
+  }
+
+  function stopTripMode() {
+    if (typeof TripMode !== "undefined") TripMode.stop();
+    if (els.tripBanner) els.tripBanner.hidden = true;
+    if (els.btnTripMode) els.btnTripMode.textContent = "Start trip mode";
+    document.body.classList.remove("trip-mode-on");
+    showToast("Trip mode ended", "success");
+  }
+
+  function saveAreaFromMap(label) {
+    if (!state.map) return;
+    const c = state.map.getCenter();
+    Storage.upsertArea({
+      label,
+      lat: c.lat,
+      lng: c.lng,
+      radiusMi: 20,
+    });
+    renderAreasList();
+    showToast(`${label} area saved`, "success");
+  }
+
+  function goToArea(area) {
+    focusAreaAround(area.lat, area.lng, area.radiusMi || 20);
+    refreshCamerasForView(true);
+    showToast(`Centered on ${area.label}`, "success");
+  }
+
+  function renderAreasList() {
+    if (!els.areasList) return;
+    const areas = Storage.loadAreas();
+    els.areasList.innerHTML = "";
+    if (!areas.length) {
+      els.areasList.innerHTML =
+        '<p class="text-[11px] text-flock-muted">No saved areas yet.</p>';
+      return;
+    }
+    areas.forEach((a) => {
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2";
+      row.innerHTML = `
+        <button type="button" class="btn-secondary flex-1 text-xs text-left" data-go>${escapeHtml(
+          a.label
+        )}</button>
+        <button type="button" class="btn-icon h-8 w-8" data-del aria-label="Delete ${escapeHtml(
+          a.label
+        )}">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6"/></svg>
+        </button>`;
+      row.querySelector("[data-go]")?.addEventListener("click", () => goToArea(a));
+      row.querySelector("[data-del]")?.addEventListener("click", () => {
+        Storage.removeArea(a.id);
+        renderAreasList();
+      });
+      els.areasList.appendChild(row);
+    });
+  }
+
+  async function loadSharedRouteFromHash() {
+    if (typeof ShareRoute === "undefined") return;
+    const parsed = ShareRoute.parse(location.hash);
+    if (!parsed) return;
+    state.start = parsed.start;
+    state.end = parsed.end;
+    state.bufferMeters = parsed.bufferMeters || 150;
+    state.userVias = [];
+    els.startInput.value = parsed.start.display_name;
+    els.endInput.value = parsed.end.display_name;
+    if (els.bufferSlider) {
+      els.bufferSlider.value = String(state.bufferMeters);
+      els.bufferValue.textContent = `${state.bufferMeters} m`;
+    }
+    showToast("Opening shared route…", "success");
+    await runPlan({ preserveVias: false });
+  }
+
+  function loadAreaFromQuery() {
+    const q = new URLSearchParams(location.search);
+    const areaKey = (q.get("area") || "").toLowerCase();
+    if (!areaKey) return;
+    const areas = Storage.loadAreas();
+    const match = areas.find((a) => a.label.toLowerCase() === areaKey || a.id.includes(areaKey));
+    if (match) goToArea(match);
   }
 
   // ---------- Community report form ----------
@@ -2060,6 +2372,15 @@
     }
     if (els.toggleLiveOsm) els.toggleLiveOsm.checked = state.useLiveOsm;
     if (els.osmModeSelect) els.osmModeSelect.value = state.osmMode;
+    if (typeof settings.showAlpr === "boolean") state.showAlpr = settings.showAlpr;
+    if (typeof settings.showCctv === "boolean") state.showCctv = settings.showCctv;
+    if (typeof settings.showSpeed === "boolean") state.showSpeed = settings.showSpeed;
+    if (typeof settings.lowData === "boolean") state.lowData = settings.lowData;
+    if (els.toggleLayerAlpr) els.toggleLayerAlpr.checked = state.showAlpr;
+    if (els.toggleLayerCctv) els.toggleLayerCctv.checked = state.showCctv;
+    if (els.toggleLayerSpeed) els.toggleLayerSpeed.checked = state.showSpeed;
+    if (els.toggleLowData) els.toggleLowData.checked = state.lowData;
+    document.body.classList.toggle("low-data", state.lowData);
     updateOsmStatusText();
 
     PWA.init({
@@ -2112,6 +2433,16 @@
     refreshCommunityUI();
     // Restore last map area only — do not auto-fill GPS as start
     initMapViewWithoutGps();
+
+    // Shared route hash or Android shortcut ?area=home
+    setTimeout(() => {
+      loadSharedRouteFromHash();
+      loadAreaFromQuery();
+    }, 600);
+
+    window.addEventListener("hashchange", () => {
+      loadSharedRouteFromHash();
+    });
 
     console.info(
       "%cFlock Dodger%c ready — privacy-first routing",
