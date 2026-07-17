@@ -1,9 +1,10 @@
 /**
  * Flock Dodger — service worker
- * Caches app shell for offline UI; network-first for tiles/API.
+ * Caches app shell for offline UI; network-first for shell so updates land on phones.
+ * Bump CACHE_VERSION on every release that changes HTML/CSS/JS.
  */
 
-const CACHE_VERSION = "flock-dodger-v1";
+const CACHE_VERSION = "flock-dodger-v2-mobile-sheet";
 const SHELL = [
   "./",
   "./index.html",
@@ -31,16 +32,28 @@ const SHELL = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_VERSION)
+      .then((cache) => cache.addAll(SHELL))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+      )
+      .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -69,11 +82,35 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Same-origin: cache-first with network update
+  // App shell (HTML/CSS/JS): network-first so phone refreshes get new UI.
+  // Fall back to cache only when offline.
   if (url.origin === self.location.origin) {
+    const isShell =
+      url.pathname.endsWith(".html") ||
+      url.pathname.endsWith("/") ||
+      url.pathname.endsWith(".css") ||
+      url.pathname.endsWith(".js") ||
+      url.pathname.endsWith("manifest.json");
+
+    if (isShell) {
+      event.respondWith(
+        fetch(request)
+          .then((res) => {
+            if (res && res.ok) {
+              const clone = res.clone();
+              caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
+            }
+            return res;
+          })
+          .catch(() => caches.match(request).then((c) => c || caches.match("./index.html")))
+      );
+      return;
+    }
+
+    // Other same-origin (icons, etc.): stale-while-revalidate
     event.respondWith(
       caches.match(request).then((cached) => {
-        const fetched = fetch(request)
+        const network = fetch(request)
           .then((res) => {
             if (res && res.ok) {
               const clone = res.clone();
@@ -82,8 +119,7 @@ self.addEventListener("fetch", (event) => {
             return res;
           })
           .catch(() => cached);
-
-        return cached || fetched;
+        return cached || network;
       })
     );
     return;
