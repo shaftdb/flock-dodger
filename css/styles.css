@@ -567,10 +567,131 @@ html, body {
   cursor: grab;
 }
 
-/* Sidebar mobile */
+/* ── Mobile map-first bottom sheet ───────────────────────────────────────── */
 @media (max-width: 1023px) {
-  .sidebar.collapsed {
-    transform: translateY(calc(100% - 3.5rem));
+  /* Map fills the stage; sheet sits on top of the bottom */
+  #main {
+    /* room so map attribution / zoom aren't under the peek bar forever */
+    padding-bottom: 0;
+  }
+
+  .leaflet-bottom {
+    bottom: 7.5rem !important;
+    transition: bottom 0.25s ease;
+  }
+
+  body.sheet-half .leaflet-bottom {
+    bottom: 46dvh !important;
+  }
+
+  body.sheet-full .leaflet-bottom {
+    bottom: 4rem !important;
+  }
+
+  .sidebar {
+    max-height: 90dvh;
+    height: auto;
+    transition: max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.2s ease;
+    will-change: max-height;
+    /* Keep sheet above map but allow taps on map outside sheet */
+    touch-action: pan-y;
+  }
+
+  /* Peek: chrome + quick buttons only — most of the map is free */
+  .sidebar.sheet-peek {
+    max-height: none;
+  }
+
+  .sidebar.sheet-peek .sidebar-body {
+    display: none;
+  }
+
+  .sidebar.sheet-half {
+    max-height: 48dvh;
+  }
+
+  .sidebar.sheet-half .sidebar-body {
+    display: block;
+    max-height: calc(48dvh - 7rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar.sheet-half #sheet-quick {
+    display: none;
+  }
+
+  .sidebar.sheet-full {
+    max-height: 92dvh;
+  }
+
+  .sidebar.sheet-full .sidebar-body {
+    display: block;
+    max-height: calc(92dvh - 5.5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar.sheet-full #sheet-quick {
+    display: none;
+  }
+
+  .sheet-chevron {
+    transition: transform 0.25s ease;
+  }
+
+  .sidebar.sheet-half .sheet-chevron,
+  .sidebar.sheet-full .sheet-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* Trip banner clears the top; empty tip card is smaller on phones */
+  #map-empty {
+    top: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    max-width: none;
+  }
+
+  #map-empty .pointer-events-auto {
+    padding: 0.65rem 0.75rem;
+  }
+
+  #map-empty .text-sm {
+    font-size: 0.8rem;
+  }
+
+  #map-empty ul {
+    display: none; /* free vertical space on phone */
+  }
+
+  .trip-banner {
+    top: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    max-width: none;
+  }
+
+  /* Dim map slightly when full sheet open so focus is on controls */
+  body.sheet-full #map::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 15, 13, 0.25);
+    z-index: 1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sidebar .sidebar-body {
+    display: block !important;
+  }
+
+  #sheet-chrome,
+  #sheet-quick {
+    display: none !important;
   }
 }
 

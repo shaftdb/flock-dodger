@@ -73,6 +73,12 @@
     btnDismissInstall: $("btn-dismiss-install"),
     installBanner: $("install-banner"),
     sidebar: $("sidebar"),
+    sidebarBody: $("sidebar-body"),
+    btnSheetToggle: $("btn-sheet-toggle"),
+    btnSheetExpand: $("btn-sheet-expand"),
+    btnSheetPlan: $("btn-sheet-plan"),
+    sheetTitle: $("sheet-title"),
+    sheetSubtitle: $("sheet-subtitle"),
     bufferSlider: $("buffer-slider"),
     bufferValue: $("buffer-value"),
     statsPanel: $("stats-panel"),
@@ -1252,6 +1258,13 @@
       } else {
         showToast(`Route updated${shaped}${note}`, "success");
       }
+      // Mobile: collapse sheet so the map (and route) are visible
+      if (typeof isMobileSheet === "function" && isMobileSheet()) {
+        setSheetMode("peek");
+        updateSheetChrome();
+      } else {
+        updateSheetChrome?.();
+      }
       // Optional soft support prompt (never blocks); see MONETIZATION.md
       if (typeof window.__flockAfterRouteSuccess === "function") {
         try {
@@ -1651,6 +1664,7 @@
           state.userVias = [];
           setEndpoints(state.start, state.end);
           updateMapEmpty();
+          updateSheetChrome();
         }
       },
       "start"
@@ -1664,10 +1678,15 @@
           state.userVias = [];
           setEndpoints(state.start, state.end);
           updateMapEmpty();
+          updateSheetChrome();
         }
       },
       "end"
     );
+
+    [els.startInput, els.endInput].forEach((inp) => {
+      inp?.addEventListener("input", () => updateSheetChrome());
+    });
 
     els.btnRoute.addEventListener("click", () => runPlan({ preserveVias: false }));
     els.btnRouteRetry?.addEventListener("click", () => runPlan({ preserveVias: true }));
@@ -1841,11 +1860,8 @@
       el.addEventListener("click", closeSavedModal);
     });
 
-    els.btnMenu.addEventListener("click", () => {
-      els.sidebar.classList.toggle("collapsed");
-      const open = !els.sidebar.classList.contains("collapsed");
-      els.btnMenu.setAttribute("aria-expanded", open ? "true" : "false");
-    });
+    // Mobile bottom sheet: peek (map-first) → half → full
+    setupMobileSheet();
 
     // Layers
     const rerenderCameras = () => {
@@ -2046,6 +2062,153 @@
         if (typeof PremiumUI !== "undefined") PremiumUI.renderFeatureList();
       });
     }
+  }
+
+  // ---------- Mobile sheet (map-first on phones) ----------
+  function isMobileSheet() {
+    return window.matchMedia("(max-width: 1023px)").matches;
+  }
+
+  function getSheetMode() {
+    if (!els.sidebar) return "peek";
+    if (els.sidebar.classList.contains("sheet-full")) return "full";
+    if (els.sidebar.classList.contains("sheet-half")) return "half";
+    return "peek";
+  }
+
+  function setSheetMode(mode) {
+    if (!els.sidebar || !isMobileSheet()) {
+      // Desktop: always show body
+      document.body.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+      return;
+    }
+    els.sidebar.classList.remove("sheet-peek", "sheet-half", "sheet-full", "collapsed");
+    const m = mode === "full" || mode === "half" ? mode : "peek";
+    els.sidebar.classList.add(`sheet-${m}`);
+    document.body.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+    document.body.classList.add(`sheet-${m}`);
+
+    const open = m !== "peek";
+    els.btnMenu?.setAttribute("aria-expanded", open ? "true" : "false");
+    els.btnSheetToggle?.setAttribute("aria-expanded", open ? "true" : "false");
+
+    updateSheetChrome();
+
+    // Let Leaflet recalculate size after sheet animation
+    setTimeout(() => {
+      try {
+        state.map?.invalidateSize({ animate: false });
+      } catch {
+        /* ignore */
+      }
+    }, 300);
+  }
+
+  function updateSheetChrome() {
+    if (!els.sheetTitle) return;
+    const mode = getSheetMode();
+    if (state.lastPlan) {
+      const score = state.lastPlan.privacyScore;
+      const avoided = state.lastPlan.avoidedCount;
+      els.sheetTitle.textContent = `Score ${score} · avoided ${avoided}`;
+      els.sheetSubtitle.textContent =
+        mode === "peek"
+          ? "Tap for details · map is free"
+          : mode === "half"
+            ? "Scroll options · drag handle or tap title to expand"
+            : "Tap title to collapse and free the map";
+    } else if (state.start || state.end) {
+      const a = Storage.shortName(state.start?.display_name || els.startInput?.value || "Start");
+      const b = Storage.shortName(state.end?.display_name || els.endInput?.value || "End");
+      els.sheetTitle.textContent = `${a} → ${b}`;
+      els.sheetSubtitle.textContent =
+        mode === "peek" ? "Tap Options or Find routes" : "Edit addresses below";
+    } else {
+      els.sheetTitle.textContent = "Plan a route";
+      els.sheetSubtitle.textContent =
+        mode === "peek" ? "Tap to open options · map stays free" : "Enter start & destination";
+    }
+  }
+
+  function cycleSheetMode() {
+    const mode = getSheetMode();
+    if (mode === "peek") setSheetMode("half");
+    else if (mode === "half") setSheetMode("full");
+    else setSheetMode("peek");
+  }
+
+  function setupMobileSheet() {
+    // Default map-first on phones
+    if (isMobileSheet()) setSheetMode("peek");
+    else setSheetMode("peek"); // no-op classes on desktop
+
+    els.btnMenu?.addEventListener("click", () => {
+      if (!isMobileSheet()) return;
+      const mode = getSheetMode();
+      setSheetMode(mode === "peek" ? "half" : "peek");
+    });
+
+    els.btnSheetToggle?.addEventListener("click", () => {
+      if (!isMobileSheet()) return;
+      cycleSheetMode();
+    });
+
+    els.btnSheetExpand?.addEventListener("click", () => {
+      setSheetMode("half");
+      // Focus start field for quick typing
+      setTimeout(() => els.startInput?.focus(), 280);
+    });
+
+    els.btnSheetPlan?.addEventListener("click", () => {
+      // Expand enough to show progress/errors, then plan
+      if (isMobileSheet() && getSheetMode() === "peek") setSheetMode("half");
+      runPlan({ preserveVias: false });
+    });
+
+    // Swipe-down on chrome to collapse
+    const chrome = $("sheet-chrome");
+    if (chrome) {
+      let startY = 0;
+      chrome.addEventListener(
+        "touchstart",
+        (e) => {
+          startY = e.changedTouches[0].clientY;
+        },
+        { passive: true }
+      );
+      chrome.addEventListener(
+        "touchend",
+        (e) => {
+          if (!isMobileSheet()) return;
+          const dy = e.changedTouches[0].clientY - startY;
+          if (dy > 40) {
+            // swipe down → collapse
+            const mode = getSheetMode();
+            if (mode === "full") setSheetMode("half");
+            else setSheetMode("peek");
+          } else if (dy < -40) {
+            // swipe up → expand
+            const mode = getSheetMode();
+            if (mode === "peek") setSheetMode("half");
+            else if (mode === "half") setSheetMode("full");
+          }
+        },
+        { passive: true }
+      );
+    }
+
+    window.addEventListener(
+      "resize",
+      debounce(() => {
+        if (!isMobileSheet()) {
+          document.body.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+          els.sidebar?.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+        } else if (!els.sidebar?.classList.contains("sheet-half") && !els.sidebar?.classList.contains("sheet-full")) {
+          setSheetMode("peek");
+        }
+        state.map?.invalidateSize({ animate: false });
+      }, 200)
+    );
   }
 
   // ---------- Trip mode ----------

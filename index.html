@@ -97,7 +97,7 @@
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
             <span class="hidden sm:inline">Install</span>
           </button>
-          <button id="btn-menu" type="button" class="btn-icon lg:hidden" title="Toggle panel" aria-label="Toggle controls" aria-expanded="true" aria-controls="sidebar">
+          <button id="btn-menu" type="button" class="btn-icon lg:hidden" title="Route options" aria-label="Open route options" aria-expanded="false" aria-controls="sidebar">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
         </div>
@@ -105,18 +105,36 @@
     </header>
 
     <div class="flex flex-1 min-h-0 relative">
-      <!-- Sidebar / controls -->
-      <aside id="sidebar" class="sidebar absolute lg:relative inset-x-0 bottom-0 lg:inset-auto z-20 lg:z-10 flex flex-col w-full lg:w-[380px] xl:w-[400px] max-h-[72dvh] lg:max-h-none lg:h-full bg-flock-surface border-t lg:border-t-0 lg:border-r border-flock-border shadow-2xl lg:shadow-none transition-transform duration-300 ease-out rounded-t-2xl lg:rounded-none">
-        <!-- Mobile drag handle -->
-        <div class="lg:hidden flex justify-center pt-2 pb-1" aria-hidden="true">
-          <div class="h-1 w-10 rounded-full bg-flock-border"></div>
+      <!-- Mobile: map-first. Bottom sheet peeks; expand for full controls. Desktop: left sidebar. -->
+      <aside id="sidebar" class="sidebar sheet-peek absolute lg:relative inset-x-0 bottom-0 lg:inset-auto z-20 lg:z-10 flex flex-col w-full lg:w-[380px] xl:w-[400px] lg:max-h-none lg:h-full bg-flock-surface border-t lg:border-t-0 lg:border-r border-flock-border shadow-2xl lg:shadow-none rounded-t-2xl lg:rounded-none">
+        <!-- Mobile sheet chrome (always visible) -->
+        <div id="sheet-chrome" class="lg:hidden shrink-0 select-none">
+          <button type="button" id="btn-sheet-toggle" class="w-full px-3 pt-2 pb-2 text-left" aria-expanded="false" aria-controls="sidebar-body">
+            <div class="flex justify-center pb-2" aria-hidden="true">
+              <div class="h-1 w-10 rounded-full bg-flock-border"></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="min-w-0 flex-1">
+                <p id="sheet-title" class="text-sm font-semibold text-flock-text truncate">Plan a route</p>
+                <p id="sheet-subtitle" class="text-[11px] text-flock-muted truncate">Tap to open options · map stays free</p>
+              </div>
+              <span id="sheet-chevron" class="sheet-chevron shrink-0 text-flock-muted" aria-hidden="true">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+              </span>
+            </div>
+          </button>
+          <!-- Quick actions while sheet is collapsed -->
+          <div id="sheet-quick" class="px-3 pb-3 flex gap-2">
+            <button type="button" id="btn-sheet-plan" class="btn-primary flex-1 text-xs py-2.5">Find routes</button>
+            <button type="button" id="btn-sheet-expand" class="btn-secondary text-xs px-3 py-2.5 shrink-0">Options</button>
+          </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 pb-4 space-y-4 custom-scroll">
-          <!-- Privacy notice -->
+        <div id="sidebar-body" class="sidebar-body flex-1 overflow-y-auto overscroll-contain px-3 sm:px-4 pb-4 space-y-4 custom-scroll">
+          <!-- Privacy notice — compact on mobile -->
           <div class="mt-1 flex gap-2 rounded-xl bg-flock-accent/5 border border-flock-accent/20 px-3 py-2.5 text-xs text-flock-dim">
             <svg class="h-4 w-4 shrink-0 text-flock-accent mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <p><strong class="text-flock-text font-medium">Local-first.</strong> Routes stay on your device. Geocoding uses public OpenStreetMap. No account required.</p>
+            <p><strong class="text-flock-text font-medium">Local-first.</strong> Routes stay on your device. No account required.</p>
           </div>
 
           <!-- Route inputs -->
